@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# next.js build output
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# stray root-level lockfile (no root package.json)
+/package-lock.json
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
