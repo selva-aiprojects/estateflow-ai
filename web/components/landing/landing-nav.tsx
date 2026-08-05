@@ -12,6 +12,15 @@ const links = [
   { href: "#security", label: "Security" },
 ];
 
+function scrollToAnchor(href: string, e: React.MouseEvent<HTMLAnchorElement>) {
+  if (!href.startsWith("#")) return;
+  const target = document.querySelector<HTMLElement>(href);
+  if (!target) return;
+  e.preventDefault();
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.history.replaceState(null, "", href);
+}
+
 export function LandingNav() {
   const [open, setOpen] = useState(false);
 
@@ -34,6 +43,7 @@ export function LandingNav() {
             <a
               key={link.href}
               href={link.href}
+              onClick={(e) => scrollToAnchor(link.href, e)}
               className="rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-surface-muted hover:text-text cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               {link.label}
@@ -70,7 +80,10 @@ export function LandingNav() {
               <a
                 key={link.href}
                 href={link.href}
-                onClick={() => setOpen(false)}
+                onClick={(e) => {
+                  scrollToAnchor(link.href, e);
+                  setOpen(false);
+                }}
                 className="rounded-md px-3 py-2.5 text-sm font-medium text-text transition-colors duration-200 hover:bg-surface-muted cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {link.label}
