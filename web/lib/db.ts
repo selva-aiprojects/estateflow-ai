@@ -2,18 +2,31 @@ import { Pool, type PoolClient } from "pg";
 
 export const TENANT_SCHEMA = process.env.TENANT_SCHEMA ?? "builder_a";
 
+// Vercel/Neon provision a single connection string (DATABASE_URL / POSTGRES_URL)
+// instead of individual PG* vars. Prefer it so a standard deployment works
+// without extra config; fall back to the individual PG* vars for local dev.
+const CONNECTION_STRING =
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_URL ??
+  process.env.POSTGRES_URL_NON_POOLING;
+
 declare global {
   // eslint-disable-next-line no-var
   var __estateflowPool: Pool | undefined;
 }
 
 function createPool(): Pool {
+  const base = CONNECTION_STRING
+    ? { connectionString: CONNECTION_STRING }
+    : {
+        host: process.env.PGHOST ?? "127.0.0.1",
+        port: Number(process.env.PGPORT ?? 5432),
+        user: process.env.PGUSER ?? "postgres",
+        password: process.env.PGPASSWORD ?? "postgres",
+        database: process.env.PGDATABASE ?? "estateflow",
+      };
   return new Pool({
-    host: process.env.PGHOST ?? "127.0.0.1",
-    port: Number(process.env.PGPORT ?? 5432),
-    user: process.env.PGUSER ?? "postgres",
-    password: process.env.PGPASSWORD ?? "postgres",
-    database: process.env.PGDATABASE ?? "estateflow",
+    ...base,
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
