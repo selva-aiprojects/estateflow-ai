@@ -6,10 +6,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   let db = "ok";
+  let dbError: string | null = null;
   try {
     await q(`SELECT 1`);
-  } catch {
+  } catch (err) {
     db = "error";
+    dbError = err instanceof Error ? err.message : String(err);
   }
   return NextResponse.json({
     ok: db === "ok",
@@ -17,6 +19,7 @@ export async function GET() {
     version: "0.1.0-demo",
     tenant: TENANT_SCHEMA,
     db,
+    dbError,
     time: new Date().toISOString(),
   });
 }

@@ -16,21 +16,32 @@ declare global {
 }
 
 function createPool(): Pool {
-  const base = CONNECTION_STRING
-    ? { connectionString: CONNECTION_STRING }
-    : {
-        host: process.env.PGHOST ?? "127.0.0.1",
-        port: Number(process.env.PGPORT ?? 5432),
-        user: process.env.PGUSER ?? "postgres",
-        password: process.env.PGPASSWORD ?? "postgres",
-        database: process.env.PGDATABASE ?? "estateflow",
-      };
-  return new Pool({
-    ...base,
+  const common = {
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+  };
+  if (CONNECTION_STRING) {
+    // Connection-string mode (Vercel/Neon). Don't send `options` as a startup
+    // parameter — pooled endpoints (PgBouncer/Neon) can reject it, which would
+    // kill the connection before it is established. Apply the search_path on
+    // each new connection instead.
+    const p = new Pool({ connectionString: CONNECTION_STRING, ...common });
+    p.on("connect", (client) => {
+      client
+        .query(`SET search_path TO ${quoteIdent(TENANT_SCHEMA)}, public`)
+        .catch(() => {});
+    });
+    return p;
+  }
+  return new Pool({
+    host: process.env.PGHOST ?? "127.0.0.1",
+    port: Number(process.env.PGPORT ?? 5432),
+    user: process.env.PGUSER ?? "postgres",
+    password: process.env.PGPASSWORD ?? "postgres",
+    database: process.env.PGDATABASE ?? "estateflow",
     options: `-c search_path=${TENANT_SCHEMA},public`,
+    ...common,
   });
 }
 
