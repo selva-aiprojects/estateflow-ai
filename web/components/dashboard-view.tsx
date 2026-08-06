@@ -19,13 +19,6 @@ import { AssistantPanel } from "@/components/assistant-panel";
 import { useApiData } from "@/lib/api-client";
 import { useTenant } from "@/lib/tenant-context";
 import {
-  executiveKpis as seedKpis,
-  landKpis as seedLandKpis,
-  cashFlowData as seedCashFlow,
-  salesVelocity as seedVelocity,
-  notifications as seedNotifications,
-  projects as seedProjects,
-  landParcels as seedParcels,
   unitStatusMeta,
   landStatusMeta,
   computeLandSummary,
@@ -33,6 +26,7 @@ import {
 } from "@/lib/data";
 import { formatAcres, inrCompact } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 
 interface DashboardPayload {
   kpis: Kpi[];
@@ -45,41 +39,11 @@ interface DashboardPayload {
   landSummary: ReturnType<typeof computeLandSummary>;
 }
 
-function seedUnitMix() {
-  const counts: Record<string, number> = {};
-  seedProjects.forEach((p) => p.towers.forEach((t) => t.units.forEach((u) => (counts[u.status] = (counts[u.status] ?? 0) + 1))));
-  return [
-    { label: unitStatusMeta.available.label, value: counts.available ?? 0, color: unitStatusMeta.available.color },
-    { label: unitStatusMeta.blocked.label, value: counts.blocked ?? 0, color: unitStatusMeta.blocked.color },
-    { label: unitStatusMeta.token_paid.label, value: counts.token_paid ?? 0, color: unitStatusMeta.token_paid.color },
-    { label: unitStatusMeta.sold.label, value: counts.sold ?? 0, color: unitStatusMeta.sold.color },
-  ];
-}
-
-function seedLandMix() {
-  const counts: Record<string, number> = {};
-  seedParcels.forEach((p) => (counts[p.status] = (counts[p.status] ?? 0) + 1));
-  return [
-    { label: landStatusMeta.available.label, value: counts.available ?? 0, color: landStatusMeta.available.color },
-    { label: landStatusMeta.hold.label, value: counts.hold ?? 0, color: landStatusMeta.hold.color },
-    { label: landStatusMeta.token_paid.label, value: counts.token_paid ?? 0, color: landStatusMeta.token_paid.color },
-    { label: landStatusMeta.registered.label, value: counts.registered ?? 0, color: landStatusMeta.registered.color },
-    { label: landStatusMeta.sold.label, value: counts.sold ?? 0, color: landStatusMeta.sold.color },
-  ];
-}
-
 export function DashboardView() {
   const { tenant, plan, has } = useTenant();
-  const [dashboard] = useApiData<DashboardPayload>("/api/dashboard", {
-    kpis: seedKpis,
-    landKpis: seedLandKpis,
-    cashFlow: seedCashFlow,
-    salesVelocity: seedVelocity,
-    notifications: seedNotifications,
-    unitMix: seedUnitMix(),
-    landMix: seedLandMix(),
-    landSummary: computeLandSummary(seedParcels),
-  });
+  const [dashboard] = useApiData<DashboardPayload>("/api/dashboard");
+
+  if (!dashboard) return <PageSkeleton />;
 
   const showHomes = has("apartments");
   const showLand = has("land");

@@ -24,7 +24,7 @@ const steps = [
   {
     icon: Wallet,
     title: "Billing & collect",
-    copy: "Milestone invoices auto-reconcile from bank statements — GST, TDS and RERA disclosures included.",
+    copy: "Milestone invoices auto-reconcile from bank statements — GST, TDS and RERA disclosures included, and overdue invoices trigger payment-reminder emails automatically.",
   },
 ];
 

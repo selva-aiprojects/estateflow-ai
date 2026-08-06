@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { decideQuote } from "@/lib/mock-store";
+import { decideQuote } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ quoteId: stri
   }
 
   const approve = body.action === "approve";
-  const quote = decideQuote(quoteId, approve);
+  const quote = await decideQuote(quoteId, approve);
   if (!quote) {
     return NextResponse.json({ error: "quote not found" }, { status: 404 });
   }

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { CheckCircle2, AlertTriangle, Clock, HardHat, Gauge, Mountain, FileText, Eye, ScanEye } from "lucide-react";
-import { milestones as seedMilestones, dprRows as seedDprRows } from "@/lib/data";
 import { useApiData } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 import { Badge, Button, Card, CardHeader, PageHeader, Spinner } from "@/components/ui";
 
 const msStatus = {
@@ -15,20 +15,17 @@ const msStatus = {
   delayed: { label: "Delayed", tone: "danger" as const, icon: AlertTriangle },
 };
 
-const seedTowerStats = [
-  { tower: "T1", progress: 68.4, lab: 84, concrete: "42 m³", lag: "2 days ahead" },
-  { tower: "T2", progress: 61.2, lab: 76, concrete: "35 m³", lag: "0 days ahead" },
-];
+type Milestone = { id: string; name: string; status: keyof typeof msStatus; planned: string; actual?: string; progress: number };
+type DprRow = { date: string; tower: string; engineer: string; progress: number; labour: number; concreteCum: number; note: string };
+type TowerStat = { tower: string; progress: number; lab: number; concrete: string; lag: string };
 
 export function ConstructionView() {
-  const [construction] = useApiData("/api/construction", {
-    milestones: seedMilestones,
-    dprRows: seedDprRows,
-    towerStats: seedTowerStats,
-  });
-  const { milestones, dprRows, towerStats } = construction;
+  const [construction] = useApiData<{ milestones: Milestone[]; dprRows: DprRow[]; towerStats: TowerStat[] }>("/api/construction");
   const [photos, setPhotos] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  if (!construction) return <PageSkeleton />;
+  const { milestones, dprRows, towerStats } = construction;
 
   const togglePhotos = () => {
     if (photos) {

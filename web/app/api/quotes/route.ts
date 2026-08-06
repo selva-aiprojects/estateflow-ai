@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getQuotes, createQuote } from "@/lib/mock-store";
+import { getQuotes, createQuote } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return NextResponse.json({ data: getQuotes() });
+export async function GET() {
+  return NextResponse.json({ data: await getQuotes() });
 }
 
 export async function POST(req: Request) {
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   }
 
   const discountPct = Math.max(0, Number(body.discountPct) || 0);
-  const result = createQuote({
+  const result = await createQuote({
     customer: body.customer ?? "",
     projectId: body.projectId,
     unitId: body.unitId,

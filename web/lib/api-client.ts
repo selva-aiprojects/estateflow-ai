@@ -29,26 +29,31 @@ export async function apiSend<T>(path: string, init: RequestInit): Promise<T> {
 }
 
 /**
- * Loads data from an API endpoint once on mount, falling back to a static
- * seed value so the UI renders even if the API is unavailable (offline /
- * static prerender). Returns the current value and a setter.
+ * Loads data from an API endpoint once on mount. Returns the current value
+ * (undefined until the first successful load), a setter, and a `loading`
+ * flag. Views render a skeleton while `loading` is true — no static seed data.
  */
-export function useApiData<T>(path: string, fallback: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [data, setData] = useState<T>(fallback);
+export function useApiData<T>(path: string, fallback?: T): [T | undefined, React.Dispatch<React.SetStateAction<T | undefined>>, boolean] {
+  const [data, setData] = useState<T | undefined>(fallback);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     apiGet<T>(path)
       .then((value) => {
-        if (active) setData(value);
+        if (active) {
+          setData(value);
+          setLoading(false);
+        }
       })
       .catch(() => {
-        // Keep the static seed on failure; demo must never break.
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
   }, [path]);
 
-  return [data, setData];
+  return [data, setData, loading];
 }

@@ -20,12 +20,20 @@ import {
   Zap,
   Lock,
   Rocket,
+  PackageSearch,
+  Scale,
+  UserCog,
+  Building2,
+  KeyRound,
+  Store,
+  Handshake,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { Avatar, Badge, Button, Card, IconButton } from "@/components/ui";
-import { notifications as seedNotifications } from "@/lib/data";
+import { Badge, Button, Card, IconButton } from "@/components/ui";
 import { useApiData } from "@/lib/api-client";
 import { TenantProvider, useTenant } from "@/lib/tenant-context";
+import { UserChip } from "@/components/user-chip";
 import type { Segment } from "@/lib/data";
 
 interface NavItem {
@@ -41,6 +49,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
     label: "Operations",
     items: [
       { href: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard, persona: "management" },
+      { href: "/sales", label: "Sales Engine", icon: Users, persona: "sales" },
       { href: "/inventory", label: "Inventory Heat Map", icon: Grid3x3, persona: "sales", segment: "apartments" },
       { href: "/land", label: "Land Portfolio", icon: Map, persona: "sales", segment: "land" },
       { href: "/leads", label: "Lead Pipeline", icon: Users, persona: "sales" },
@@ -48,6 +57,19 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { href: "/construction", label: "Construction & DPR", icon: HardHat, persona: "construction", segment: "apartments" },
       { href: "/finance", label: "Finance & Collections", icon: Landmark, persona: "finance" },
       { href: "/portal", label: "Customer Portal", icon: Home, persona: "customer" },
+    ],
+  },
+  {
+    label: "Enterprise Suite",
+    items: [
+      { href: "/procurement", label: "Procurement & Vendors", icon: PackageSearch, persona: "construction" },
+      { href: "/legal", label: "Legal & RERA", icon: Scale, persona: "management" },
+      { href: "/hr", label: "HR & Contract Labour", icon: UserCog, persona: "construction" },
+      { href: "/facility", label: "Facility & Society Ops", icon: Building2, persona: "customer" },
+      { href: "/rentals", label: "Rental Operations", icon: KeyRound, persona: "finance" },
+      { href: "/marketplace", label: "Marketplace", icon: Store, persona: "sales" },
+      { href: "/partners", label: "Channel Partners", icon: Handshake, persona: "sales" },
+      { href: "/ai", label: "AI Command Center", icon: Cpu, persona: "management" },
     ],
   },
 ];
@@ -73,13 +95,14 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const { tenant, plan, tenants, has, setTenantId } = useTenant();
   const [persona, setPersona] = useState("management");
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications] = useApiData("/api/notifications", seedNotifications);
+  const [notifications] = useApiData<{ id: string; title: string; body: string; time: string; tone: string }[]>("/api/notifications");
 
-  const visibleItems = navSections[0].items.filter(
+  const allItems = navSections.flatMap((s) => s.items);
+  const visibleItems = allItems.filter(
     (item) => (item.persona === persona || persona === "management") && (!item.segment || has(item.segment)),
   );
 
-  const currentItem = navSections[0].items.find((i) => pathname === i.href);
+  const currentItem = allItems.find((i) => pathname === i.href);
   const locked = Boolean(currentItem?.segment && !has(currentItem.segment));
 
   const visiblePersonas = personas.filter((p) => !p.segment || has(p.segment));
@@ -146,30 +169,34 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="mt-4 flex-1 overflow-y-auto px-3 pb-4">
-          {navSections.map((section) => (
-            <div key={section.label}>
-              <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">{section.label}</p>
-              <ul className="space-y-1">
-                {visibleItems.map((item) => {
-                  const active = pathname === item.href;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors duration-200 cursor-pointer",
-                          active ? "bg-primary text-white font-medium" : "text-white/70 hover:bg-white/10 hover:text-white",
-                        )}
-                      >
-                        <item.icon size={16} strokeWidth={active ? 2.2 : 1.8} />
-                        {item.label}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+          {navSections.map((section) => {
+            const sectionItems = section.items.filter((item) => visibleItems.includes(item));
+            if (sectionItems.length === 0) return null;
+            return (
+              <div key={section.label}>
+                <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">{section.label}</p>
+                <ul className="space-y-1">
+                  {sectionItems.map((item) => {
+                    const active = pathname === item.href;
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors duration-200 cursor-pointer",
+                            active ? "bg-primary text-white font-medium" : "text-white/70 hover:bg-white/10 hover:text-white",
+                          )}
+                        >
+                          <item.icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                          {item.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="border-t border-white/10 p-3">
@@ -201,7 +228,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
               <IconButton label="Notifications" onClick={() => setNotifOpen((v) => !v)}>
                 <Bell size={17} />
                 <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-danger text-[9px] font-semibold text-white">
-                  {notifications.length}
+                  {notifications?.length ?? 0}
                 </span>
               </IconButton>
               {notifOpen && (
@@ -211,7 +238,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
                     <span className="text-[11px] text-text-subtle">Temporal workflows</span>
                   </div>
                   <ul>
-                    {notifications.map((n) => (
+                    {(notifications ?? []).map((n) => (
                       <li key={n.id} className="border-b border-border/60 px-4 py-3 last:border-0 hover:bg-surface-muted/50 transition-colors">
                         <div className="flex items-start gap-2.5">
                           <span
@@ -235,11 +262,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <div className="ml-2 flex items-center gap-2 border-l border-border pl-3">
-              <Avatar name="Ananya Rao" size="sm" />
-              <div className="hidden sm:block">
-                <p className="text-xs font-medium text-text leading-tight">Ananya Rao</p>
-                <p className="text-[10px] text-text-subtle leading-tight">Operations Director</p>
-              </div>
+              <UserChip />
             </div>
           </div>
         </header>

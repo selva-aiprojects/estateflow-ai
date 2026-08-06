@@ -3,19 +3,18 @@
 import { useMemo, useState } from "react";
 import { FilePlus2, CheckCircle2, XCircle, Clock, ShieldAlert, X, TrendingUp, Map, Building2 } from "lucide-react";
 import {
-  projects as seedProjects,
-  quotes as seedQuotes,
-  landParcels as seedLandParcels,
-  plotLayouts as seedPlotLayouts,
   quoteStatusMeta,
   type Quote,
   type QuoteStatus,
   type Project,
   type Segment,
+  type LandParcel,
+  type PlotLayout,
 } from "@/lib/data";
 import { useApiData, apiSend } from "@/lib/api-client";
 import { inr, formatAcres } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 import { Avatar, Badge, Button, Card, CardHeader, Input, PageHeader, Select, Spinner } from "@/components/ui";
 
 const toneMap: Record<string, "muted" | "primary" | "success" | "warning" | "danger" | "info"> = {
@@ -33,46 +32,50 @@ interface QuoteResponse {
 }
 
 export function QuotesView() {
-  const [rows, setRows] = useApiData<Quote[]>("/api/quotes", seedQuotes);
-  const [inventory] = useApiData("/api/inventory", { projects: seedProjects });
-  const { projects } = inventory;
+  const [rows, setRows] = useApiData<Quote[]>("/api/quotes");
+  const [inventory] = useApiData<{ projects: Project[] }>("/api/inventory");
+  const [land] = useApiData<{ parcels: LandParcel[]; layouts: PlotLayout[] }>("/api/land");
   const [showBuilder, setShowBuilder] = useState(false);
   const [segment, setSegment] = useState<Segment>("apartments");
-  const [projectId, setProjectId] = useState(projects[0].id);
+  const [projectId, setProjectId] = useState("");
   const [unitId, setUnitId] = useState("");
   const [landId, setLandId] = useState("");
   const [discount, setDiscount] = useState("2.0");
   const [customer, setCustomer] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [apprId, setApprId] = useState<string | null>(null);
 
   const units = useMemo(() => {
-    const p = projects.find((x) => x.id === projectId)!;
+    const p = inventory?.projects.find((x) => x.id === projectId);
+    if (!p) return [];
     return p.towers.flatMap((t) => t.units.filter((u) => u.status === "available" || u.status === "token_paid"));
-  }, [projectId]);
+  }, [projectId, inventory]);
 
   const landAssets = useMemo(() => {
-    const parcels = seedLandParcels.map((p) => ({
+    if (!land) return [];
+    const parcels = land.parcels.map((p) => ({
       id: p.id,
       kind: "parcel" as const,
       label: `${p.code} · ${p.name} · ${formatAcres(p.acres)}`,
       base: p.acres * p.ratePerAcre,
     }));
-    const plots = seedPlotLayouts
+    const plots = land.layouts
       .flatMap((l) => l.plots)
       .filter((p) => p.status === "available" || p.status === "token_paid")
       .map((p) => ({ id: p.id, kind: "plot" as const, label: `${p.no} · ${p.zone} plot · ${p.sqft} sq.ft`, base: p.price }));
     return [...parcels, ...plots];
-  }, []);
+  }, [land]);
 
+  if (!rows || !inventory || !land) return <PageSkeleton />;
+
+  const { projects } = inventory;
   const selectedUnit = units.find((u) => u.id === unitId);
   const selectedLand = landAssets.find((a) => a.id === landId);
   const discountNum = parseFloat(discount) || 0;
   const base = segment === "land" ? (selectedLand?.base ?? 0) : (selectedUnit?.price ?? 0);
   const total = base - (base * discountNum) / 100;
   const needsApproval = discountNum > 5;
-  const [apprId, setApprId] = useState<string | null>(null);
-
   const pending = rows.filter((r) => r.status === "pending_approval");
 
   const submitQuote = () => {
@@ -92,7 +95,7 @@ export function QuotesView() {
         }),
       })
         .then((res) => {
-          setRows((r) => [res.quote, ...r]);
+          setRows((r) => (r ? [res.quote, ...r] : [res.quote]));
           setSubmitting(false);
           setShowBuilder(false);
           setCustomer("");
@@ -115,7 +118,7 @@ export function QuotesView() {
   };
 
   const decide = (id: string, approve: boolean) => {
-    setRows((r) => r.map((q) => (q.id === id ? { ...q, status: approve ? "approved" : "cancelled" } : q)));
+    setRows((r) => (r ? r.map((q) => (q.id === id ? { ...q, status: approve ? "approved" : "cancelled" } : q)) : r));
     apiSend<Quote>(`/api/quotes/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ action: approve ? "approve" : "reject" }),

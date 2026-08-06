@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { Bot, PhoneCall, Mail, MapPin, X, Wand2, CheckCircle2 } from "lucide-react";
-import { leads as seedLeads, leadStatusMeta, type Lead, type LeadStatus } from "@/lib/data";
+import { leadStatusMeta, type Lead, type LeadStatus } from "@/lib/data";
 import { useApiData, apiSend } from "@/lib/api-client";
 import { inr, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 import { Avatar, Badge, Button, Card, PageHeader, Spinner } from "@/components/ui";
 
 const sourceMeta: Record<Lead["source"], { label: string; tone: "primary" | "info" | "success" | "warning" | "muted" }> = {
@@ -30,7 +31,7 @@ const tabs: { id: LeadStatus | "all"; label: string }[] = [
 const scoreTone = (s: number) => (s >= 80 ? "success" : s >= 65 ? "warning" : "muted");
 
 export function LeadsView() {
-  const [leads, setLeads] = useApiData<Lead[]>("/api/leads", seedLeads);
+  const [leads, setLeads] = useApiData<Lead[]>("/api/leads");
   const [tab, setTab] = useState<LeadStatus | "all">("all");
   const [selected, setSelected] = useState<Lead | null>(null);
   const [scoring, setScoring] = useState(false);
@@ -45,10 +46,12 @@ export function LeadsView() {
     }, 1600);
   };
 
-  const filtered = useMemo(() => (tab === "all" ? leads : leads.filter((l) => l.status === tab)), [tab]);
+  const filtered = useMemo(() => (tab === "all" ? (leads ?? []) : (leads ?? []).filter((l) => l.status === tab)), [tab]);
+
+  if (!leads) return <PageSkeleton />;
 
   const setStatus = (id: string, status: LeadStatus) => {
-    setLeads((rows) => rows.map((l) => (l.id === id ? { ...l, status } : l)));
+    setLeads((rows) => (rows ? rows.map((l) => (l.id === id ? { ...l, status } : l)) : rows));
     apiSend<Lead>(`/api/leads/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
@@ -58,17 +61,17 @@ export function LeadsView() {
   const assignLead = (l: Lead) => {
     const next = l.assigned === "Arjun Nair" ? "" : "Arjun Nair";
     const assign = (label: string) =>
-      setLeads((rows) => rows.map((x) => (x.id === l.id ? { ...x, assigned: label } : x)));
+      setLeads((rows) => (rows ? rows.map((x) => (x.id === l.id ? { ...x, assigned: label } : x)) : rows));
     assign(next);
     apiSend<Lead>(`/api/leads/${l.id}`, {
       method: "PATCH",
       body: JSON.stringify({ assigned: next || "Unassigned" }),
     })
-      .then((updated) => setLeads((rows) => rows.map((x) => (x.id === updated.id ? updated : x))))
+      .then((updated) => setLeads((rows) => (rows ? rows.map((x) => (x.id === updated.id ? updated : x)) : rows)))
       .catch(() => {});
     if (next) {
       setTimeout(() => {
-        setLeads((rows) => rows.map((x) => (x.id === l.id ? { ...x, assigned: "Arjun Nair" } : x)));
+        setLeads((rows) => (rows ? rows.map((x) => (x.id === l.id ? { ...x, assigned: "Arjun Nair" } : x)) : rows));
       }, 800);
     }
   };

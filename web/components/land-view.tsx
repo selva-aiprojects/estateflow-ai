@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Map,
   ShieldCheck,
@@ -17,8 +17,6 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import {
-  landParcels as seedParcels,
-  plotLayouts as seedLayouts,
   landStatusMeta,
   titleStatusMeta,
   zoningMeta,
@@ -33,6 +31,7 @@ import { useApiData, apiSend } from "@/lib/api-client";
 import { useTenant } from "@/lib/tenant-context";
 import { inr, inrCompact, formatAcres } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 import { Badge, Button, Card, PageHeader, Select, Spinner } from "@/components/ui";
 
 interface LandPayload {
@@ -54,31 +53,24 @@ const plotStatusOrder: UnitStatus[] = ["available", "blocked", "token_paid", "so
 
 export function LandView() {
   const { plan, has } = useTenant();
-  const [land] = useApiData<LandPayload>("/api/land", {
-    parcels: seedParcels,
-    layouts: seedLayouts,
-    landStatusMeta,
-    titleStatusMeta,
-    summary: {
-      totalAcres: seedParcels.reduce((s, p) => s + p.acres, 0),
-      availableParcels: seedParcels.filter((p) => p.status === "available").length,
-      avgRatePerAcre: 29000000,
-      titleQueue: seedParcels.filter((p) => p.titleStatus !== "clear").length,
-      realised: 0,
-      registeredParcels: 0,
-    },
-  });
-  const { parcels, layouts, summary } = land;
-
+  const [land] = useApiData<LandPayload>("/api/land");
   const [tab, setTab] = useState<"parcels" | "plots">("parcels");
   const [selectedParcel, setSelectedParcel] = useState<LandParcel | null>(null);
   const [selectedPlot, setSelectedPlot] = useState<Plot | null>(null);
-  const [layoutId, setLayoutId] = useState(layouts[0].id);
+  const [layoutId, setLayoutId] = useState("");
   const [held, setHeld] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const layout = layouts.find((l) => l.id === layoutId)!;
+  const parcels = land?.parcels;
+  const layouts = land?.layouts;
+
+  useEffect(() => {
+    if (!land) return;
+    setLayoutId((cur) => cur || land.layouts[0]?.id || "");
+  }, [land]);
+
+  const layout = layouts?.find((l) => l.id === layoutId) ?? layouts?.[0];
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -120,18 +112,22 @@ export function LandView() {
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    parcels.forEach((p) => (c[p.status] = (c[p.status] ?? 0) + 1));
+    parcels?.forEach((p) => (c[p.status] = (c[p.status] ?? 0) + 1));
     return c;
   }, [parcels]);
 
   const plotCounts = useMemo(() => {
     const c: Record<string, number> = {};
-    layouts.flatMap((l) => l.plots).forEach((p) => (c[p.status] = (c[p.status] ?? 0) + 1));
+    layouts?.flatMap((l) => l.plots).forEach((p) => (c[p.status] = (c[p.status] ?? 0) + 1));
     return c;
   }, [layouts]);
 
-  const totalPlotValue = layouts.flatMap((l) => l.plots).reduce((s, p) => s + p.price, 0);
-  const soldPlotValue = layouts.flatMap((l) => l.plots).filter((p) => p.status === "sold").reduce((s, p) => s + p.price, 0);
+  if (!land) return <PageSkeleton />;
+
+  const { parcels: parcelsAll, layouts: layoutsAll, summary } = land;
+  const currentLayout = layout ?? layoutsAll[0];
+  const totalPlotValue = layoutsAll.flatMap((l) => l.plots).reduce((s, p) => s + p.price, 0);
+  const soldPlotValue = layoutsAll.flatMap((l) => l.plots).filter((p) => p.status === "sold").reduce((s, p) => s + p.price, 0);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -166,8 +162,8 @@ export function LandView() {
 
       <div className="flex gap-1.5">
         {[
-          { id: "parcels" as const, label: "Land Parcels", count: parcels.length },
-          { id: "plots" as const, label: "Plot Layouts", count: layouts.flatMap((l) => l.plots).length },
+          { id: "parcels" as const, label: "Land Parcels", count: parcelsAll.length },
+          { id: "plots" as const, label: "Plot Layouts", count: layoutsAll.flatMap((l) => l.plots).length },
         ].map((t) => (
           <button
             key={t.id}
@@ -209,7 +205,7 @@ export function LandView() {
             </Card>
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {parcels.map((p) => {
+              {parcelsAll.map((p) => {
                 const meta = landStatusMeta[p.status];
                 const isHeld = held === p.id;
                 return (
@@ -288,15 +284,15 @@ export function LandView() {
               <ul className="space-y-2 text-xs text-text-muted">
                 <li className="flex items-center justify-between">
                   <span>Title-clear parcels</span>
-                  <b className="text-text tabular-nums">{parcels.filter((p) => p.titleStatus === "clear").length}</b>
+                  <b className="text-text tabular-nums">{parcelsAll.filter((p) => p.titleStatus === "clear").length}</b>
                 </li>
                 <li className="flex items-center justify-between">
                   <span>Pending title review</span>
-                  <b className="text-text tabular-nums">{parcels.filter((p) => p.titleStatus === "in_review").length}</b>
+                  <b className="text-text tabular-nums">{parcelsAll.filter((p) => p.titleStatus === "in_review").length}</b>
                 </li>
                 <li className="flex items-center justify-between">
                   <span>Litigation flags</span>
-                  <b className="text-danger tabular-nums">{parcels.filter((p) => p.titleStatus === "litigation").length}</b>
+                  <b className="text-danger tabular-nums">{parcelsAll.filter((p) => p.titleStatus === "litigation").length}</b>
                 </li>
               </ul>
               <div className="mt-4 rounded-md border border-warning/20 bg-warning-soft/60 p-3 text-[11px] leading-relaxed text-warning">
@@ -323,7 +319,7 @@ export function LandView() {
                 <Select
                   value={layoutId}
                   onChange={setLayoutId}
-                  options={layouts.map((l) => ({ value: l.id, label: l.name }))}
+                  options={layoutsAll.map((l) => ({ value: l.id, label: l.name }))}
                 />
               </div>
             </Card>
@@ -331,7 +327,7 @@ export function LandView() {
             <Card className="p-5">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold text-text">{layout.name}</h2>
+                  <h2 className="text-sm font-semibold text-text">{currentLayout.name}</h2>
                   <p className="text-xs text-text-muted">RERA approved plotted development · sector roads &amp; parks included</p>
                 </div>
                 <Badge tone="info">
@@ -340,7 +336,7 @@ export function LandView() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {layout.plots.map((plot) => {
+                {currentLayout.plots.map((plot) => {
                   const meta = unitStatusMeta[plot.status];
                   const isHeld = held === plot.id;
                   return (
@@ -380,7 +376,7 @@ export function LandView() {
             {selectedPlot ? (
               <PlotDetail
                 plot={selectedPlot}
-                layout={layout.name}
+                layout={currentLayout.name}
                 held={held === selectedPlot.id}
                 busy={busy}
                 onClose={() => setSelectedPlot(null)}
@@ -403,7 +399,7 @@ export function LandView() {
                 <TrendingUp size={14} className="text-text-muted" /> Layout sell-through
               </h3>
               <p className="text-2xl font-semibold text-text tabular-nums">
-                {Math.round(((plotCounts.sold ?? 0) / layouts.flatMap((l) => l.plots).length) * 100)}%
+                {Math.round(((plotCounts.sold ?? 0) / layoutsAll.flatMap((l) => l.plots).length) * 100)}%
               </p>
               <p className="mt-0.5 text-[11px] text-text-subtle">
                 {inrCompact(soldPlotValue)} realised of {inrCompact(totalPlotValue)} inventory value

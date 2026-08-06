@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { updateLandStatus, lockLand } from "@/lib/mock-store";
+import { updateLandStatus, lockLand } from "@/lib/repo";
 import type { LandStatus } from "@/lib/data";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function PATCH(_req: Request, ctx: { params: Promise<{ landId: stri
   }
 
   if (body.hold) {
-    const result = lockLand(landId, body.heldBy ?? "demo-sales-executive");
+    const result = await lockLand(landId, body.heldBy ?? "demo-sales-executive");
     return NextResponse.json({ data: result });
   }
 
@@ -23,7 +23,7 @@ export async function PATCH(_req: Request, ctx: { params: Promise<{ landId: stri
     return NextResponse.json({ error: "status or hold required" }, { status: 400 });
   }
 
-  const land = updateLandStatus(landId, body.status);
+  const land = await updateLandStatus(landId, body.status);
   if (!land) {
     return NextResponse.json({ error: "land asset not found" }, { status: 404 });
   }

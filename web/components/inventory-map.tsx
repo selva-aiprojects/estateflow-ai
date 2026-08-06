@@ -1,35 +1,50 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Building2, CalendarClock, FileText, Info, Lock, RefreshCw } from "lucide-react";
-import { projects as seedProjects, unitStatusMeta, type Unit, type UnitStatus } from "@/lib/data";
+import { unitStatusMeta, type Project, type Unit, type UnitStatus } from "@/lib/data";
 import { useApiData, apiSend } from "@/lib/api-client";
 import { inr, inrCompact } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 import { Badge, Button, Card, Select } from "@/components/ui";
 
 export function InventoryMap() {
-  const [inventory] = useApiData("/api/inventory", { projects: seedProjects });
-  const { projects } = inventory;
-  const [projectId, setProjectId] = useState(projects[0].id);
-  const [towerId, setTowerId] = useState(projects[0].towers[0].id);
+  const [inventory] = useApiData<{ projects: Project[] }>("/api/inventory");
+  const [projectId, setProjectId] = useState("");
+  const [towerId, setTowerId] = useState("");
   const [selected, setSelected] = useState<Unit | null>(null);
   const [held, setHeld] = useState<Unit | null>(null);
   const [holdSeconds, setHoldSeconds] = useState(15 * 60);
 
-  const project = projects.find((p) => p.id === projectId)!;
-  const tower = project.towers.find((t) => t.id === towerId)!;
+  useEffect(() => {
+    if (!inventory) return;
+    const first = inventory.projects[0];
+    if (!first) return;
+    setProjectId((cur) => cur || first.id);
+    setTowerId((cur) => cur || first.towers[0]?.id || "");
+  }, [inventory]);
+
+  const project = inventory?.projects.find((p) => p.id === projectId) ?? inventory?.projects[0];
+  const tower = project?.towers.find((t) => t.id === towerId) ?? project?.towers[0];
 
   const floors = useMemo(() => {
+    if (!tower) return [];
     const unique = [...new Set(tower.units.map((u) => u.floor))].sort((a, b) => b - a);
     return unique.map((f) => ({ floor: f, units: tower.units.filter((u) => u.floor === f).sort((a, b) => a.no.localeCompare(b.no)) }));
   }, [tower]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    tower.units.forEach((u) => (c[u.status] = (c[u.status] ?? 0) + 1));
+    tower?.units.forEach((u) => (c[u.status] = (c[u.status] ?? 0) + 1));
     return c;
   }, [tower]);
+
+  if (!inventory) return <PageSkeleton />;
+
+  const { projects } = inventory;
+  const currentProject = project ?? projects[0];
+  const currentTower = tower ?? currentProject.towers[0];
 
   const startHold = () => {
     if (!selected) return;
@@ -81,7 +96,7 @@ export function InventoryMap() {
               <Select
                 value={towerId}
                 onChange={setTowerId}
-                options={project.towers.map((t) => ({ value: t.id, label: t.name }))}
+                options={currentProject.towers.map((t) => ({ value: t.id, label: t.name }))}
               />
             </div>
           </div>
@@ -90,9 +105,9 @@ export function InventoryMap() {
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-text">{tower.name}</h2>
+              <h2 className="text-sm font-semibold text-text">{currentTower.name}</h2>
               <p className="text-xs text-text-muted">
-                {project.name} · {project.location} · RERA {project.reraNo}
+                {currentProject.name} · {currentProject.location} · RERA {currentProject.reraNo}
               </p>
             </div>
             <Badge tone="info">
@@ -188,7 +203,7 @@ export function InventoryMap() {
 
               <div className="rounded-md border border-warning/20 bg-warning-soft/60 p-3 text-[11px] leading-relaxed text-warning">
                 <span className="inline-flex items-center gap-1 font-medium"><Info size={12} /> AI Sales Agent note:</span>{" "}
-                Demand for {selected.type} at {project.name} is strong — 2 leads within budget in the last 7 days.
+                Demand for {selected.type} at {currentProject.name} is strong — 2 leads within budget in the last 7 days.
               </div>
 
               {held?.id === selected.id ? (
@@ -237,9 +252,9 @@ export function InventoryMap() {
           <div className="mt-4 border-t border-border pt-3">
             <p className="text-xs text-text-muted">Sell-through rate</p>
             <p className="mt-1 text-2xl font-semibold text-text tabular-nums">
-              {Math.round(((counts.sold ?? 0) / tower.units.length) * 100)}%
+              {Math.round(((counts.sold ?? 0) / currentTower.units.length) * 100)}%
             </p>
-            <p className="mt-0.5 text-[11px] text-text-subtle">{inrCompact(tower.units.reduce((s, u) => s + (u.status === "sold" ? u.price : 0), 0))} realized</p>
+            <p className="mt-0.5 text-[11px] text-text-subtle">{inrCompact(currentTower.units.reduce((s, u) => s + (u.status === "sold" ? u.price : 0), 0))} realized</p>
           </div>
         </Card>
       </div>

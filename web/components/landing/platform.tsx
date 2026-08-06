@@ -10,6 +10,8 @@ import {
   Home,
   Handshake,
   ClipboardCheck,
+  Server,
+  Send,
 } from "lucide-react";
 
 const matrix = [
@@ -67,6 +69,17 @@ const modules = [
       "DigiLocker sync for agreements of sale",
     ],
     visual: <FinanceVisual />,
+  },
+  {
+    kicker: "Provisioning & control plane",
+    title: "Workspaces on demand, email built in",
+    copy: "A Nexus Admin spins up an isolated workspace — schema, data and admin login — in one click. Each tenant runs on its own PostgreSQL schema, and EstateFlow&apos;s own Resend mailer delivers the welcome kit, password resets and payment-reminder emails from a shared, audited outbox.",
+    points: [
+      "One-click tenant provisioning — isolated schema + admin user",
+      "Welcome kit & password resets via a shared email outbox",
+      "Payment-reminder emails queued automatically from overdue invoices",
+    ],
+    visual: <ControlPlaneVisual />,
   },
 ];
 
@@ -178,6 +191,56 @@ function FinanceVisual() {
   );
 }
 
+function ControlPlaneVisual() {
+  const tenants = [
+    { code: "BA", name: "Builder A Homes", state: "active" },
+    { code: "GA", name: "Green Acre Estates", state: "active" },
+    { code: "AH", name: "Aarav Heights", state: "active" },
+    { code: "EME", name: "Emerald Towers", state: "active" },
+  ] as const;
+  return (
+    <div className="rounded-lg border border-border bg-surface p-5 shadow-card">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-text">Nexus Admin console</p>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-text-muted">
+          <Server size={11} aria-hidden />
+          Superadmin
+        </span>
+      </div>
+      <ul className="mt-4 space-y-2">
+        {tenants.map((t) => (
+          <li key={t.code} className="flex items-center justify-between rounded-md border border-border bg-surface-muted/40 px-3 py-2">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-6 w-6 items-center justify-center rounded bg-surface-muted font-mono text-[10px] font-semibold text-text-subtle">{t.code}</span>
+              <span className="text-xs font-medium text-text">{t.name}</span>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+              Active
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-4 space-y-2">
+        {[
+          { label: "Welcome kit → admin@emerald.in", state: "sent" },
+          { label: "Password reset → admin@emerald.in", state: "sent" },
+          { label: "Payment reminder → RINV-2026-064 · ₹72,000", state: "sent" },
+        ].map((row) => (
+          <div key={row.label} className="flex items-center gap-2 rounded-md border border-teal/20 bg-teal-soft px-3 py-2">
+            <Send size={13} className="text-teal" aria-hidden />
+            <p className="flex-1 truncate text-xs text-teal">{row.label}</p>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-teal">
+              <BadgeCheck size={12} aria-hidden />
+              {row.state}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const moreModules = [
   { icon: FileCheck2, label: "RERA & legal" },
   { icon: Home, label: "Customer portal" },
@@ -186,6 +249,8 @@ const moreModules = [
   { icon: Users, label: "HR & contract labour" },
   { icon: Handshake, label: "Vendor marketplace" },
   { icon: Truck, label: "Broker & channel" },
+  { icon: Server, label: "Nexus Admin console" },
+  { icon: Send, label: "Email outbox" },
 ];
 
 export function Platform() {

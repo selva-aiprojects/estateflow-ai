@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getFinance } from "@/lib/mock-store";
+import { getFinance } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return NextResponse.json({ data: getFinance() });
+export async function GET() {
+  return NextResponse.json({ data: await getFinance() });
 }

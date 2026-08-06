@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getPortal } from "@/lib/mock-store";
+import { getPortal } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return NextResponse.json({ data: getPortal() });
+export async function GET() {
+  return NextResponse.json({ data: await getPortal() });
 }

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getAiChat, addAiMessage } from "@/lib/mock-store";
+import { getAiChat, addAiMessage } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return NextResponse.json({ data: getAiChat() });
+export async function GET() {
+  return NextResponse.json({ data: await getAiChat() });
 }
 
 export async function POST(req: Request) {
@@ -20,6 +20,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "text required" }, { status: 400 });
   }
 
-  const message = addAiMessage({ from: body.from === "user" ? "user" : "ai", text: body.text });
+  const message = await addAiMessage({ from: body.from === "user" ? "user" : "ai", text: body.text });
   return NextResponse.json({ data: message }, { status: 201 });
 }

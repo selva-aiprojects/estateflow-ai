@@ -441,6 +441,71 @@ erDiagram
     }
 ```
 
+### 3.8b Channel Partner Desk
+
+```mermaid
+erDiagram
+    channel_partners ||--o{ channel_deals : "registers"
+    channel_partners ||--o{ commissions : "paid via"
+    leads ||--o{ channel_deals : "referenced"
+    channel_deals ||--o| channel_deals : "duplicate_of"
+
+    channel_partners {
+        uuid id PK
+        varchar code UK
+        varchar name
+        varchar agency_name
+        varchar tier "silver|gold|platinum"
+        numeric commission_rate
+        int deals_active
+        numeric payout_ytd
+        numeric rating
+        varchar kyc_status
+        varchar status
+    }
+    channel_deals {
+        uuid id PK
+        varchar deal_no UK
+        uuid partner_id FK
+        uuid lead_id FK
+        numeric deal_value
+        numeric commission_amount
+        varchar stage "registered|verified|converted|paid"
+        boolean duplicate_flag
+        uuid duplicate_of FK
+        timestamptz registered_at
+    }
+```
+
+### 3.8c Sales Engine Analytics
+
+Derived views over `leads` + `lead_sources` — no physical tables; the funnel, source
+mix and win-rate are recomputed by the analytics layer.
+
+```mermaid
+erDiagram
+    leads ||--o| v_sales_funnel : "aggregates"
+    leads ||--o{ v_sales_source_mix : "groups"
+    leads ||--o| v_sales_win_rate : "computes"
+    lead_sources ||--o{ v_sales_source_mix : "names"
+
+    v_sales_funnel {
+        varchar stage "new|qualified|visit_scheduled|booked|won|lost"
+        bigint lead_count
+        numeric pipeline_value
+    }
+    v_sales_source_mix {
+        varchar source
+        varchar source_name
+        bigint lead_count
+    }
+    v_sales_win_rate {
+        bigint won_count
+        bigint decided_count
+        numeric win_rate_pct
+    }
+```
+
 ### 3.9 AI Layer & Site Visits
 
 ```mermaid
@@ -489,4 +554,4 @@ erDiagram
 | File | Contents |
 |---|---|
 | `sql/01_public_schema.sql` | Control plane: tenants, users, memberships, system audit, provisioning helper |
-| `sql/02_tenant_schema.sql` | Tenant schema template: 117 tables across 16 modules |
+| `sql/02_tenant_schema.sql` | Tenant schema template: 119 tables + 3 analytics views across 16 modules |

@@ -12,7 +12,15 @@
 -- =====================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS vector;
+
+-- pgvector is optional: created when the runtime provides it (Linux/Docker).
+-- When absent, vector_documents.embedding falls back to jsonb below.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') THEN
+        EXECUTE 'CREATE EXTENSION IF NOT EXISTS vector';
+    END IF;
+END $$;
 
 -- ---------------------------------------------------------------------
 -- 1. COMMON / FOUNDATION
@@ -1465,6 +1473,98 @@ CREATE TABLE commissions (
 );
 
 -- ---------------------------------------------------------------------
+-- 14b. CHANNEL PARTNER DESK
+-- Tiers, deal registration, duplicate detection and commission payout
+-- ledger for external channel partners (CP desks).
+-- ---------------------------------------------------------------------
+
+CREATE TABLE channel_partners (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    code             varchar(40) NOT NULL UNIQUE,
+    name             varchar(200) NOT NULL,
+    agency_name      varchar(200) NOT NULL,
+    tier             varchar(20) NOT NULL DEFAULT 'silver'
+                              CHECK (tier IN ('silver','gold','platinum')),
+    commission_rate  numeric(5,2) NOT NULL DEFAULT 0.80,
+    deals_active     int          NOT NULL DEFAULT 0,
+    payout_ytd       numeric(19,2) NOT NULL DEFAULT 0,
+    rating           numeric(2,1) NOT NULL DEFAULT 4.0 CHECK (rating BETWEEN 0 AND 5),
+    kyc_status       varchar(20) NOT NULL DEFAULT 'pending'
+                              CHECK (kyc_status IN ('pending','verified','rejected')),
+    status           varchar(20) NOT NULL DEFAULT 'active'
+                              CHECK (status IN ('active','suspended','archived')),
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE channel_deals (
+    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    deal_no           varchar(40) NOT NULL UNIQUE,
+    partner_id        uuid NOT NULL REFERENCES channel_partners(id),
+    lead_id           uuid REFERENCES leads(id),
+    customer_id       uuid REFERENCES customers(id),
+    project_id        uuid REFERENCES projects(id),
+    unit_id           uuid REFERENCES units(id),
+    deal_value        numeric(19,2) NOT NULL,
+    commission_amount numeric(19,2) NOT NULL,
+    stage             varchar(20) NOT NULL DEFAULT 'registered'
+                              CHECK (stage IN ('registered','verified','converted','paid')),
+    duplicate_flag    boolean NOT NULL DEFAULT false,
+    duplicate_of      uuid REFERENCES channel_deals(id),
+    registered_at     timestamptz NOT NULL DEFAULT now(),
+    verified_at       timestamptz,
+    paid_at           timestamptz
+);
+
+CREATE INDEX idx_channel_deals_partner_stage ON channel_deals(partner_id, stage);
+CREATE INDEX idx_channel_deals_duplicate ON channel_deals(duplicate_flag) WHERE duplicate_flag = true;
+CREATE INDEX idx_channel_partners_tier ON channel_partners(tier, status);
+
+-- ---------------------------------------------------------------------
+-- 14c. SALES ENGINE ANALYTICS (derived views over leads + bookings)
+-- Funnel, source attribution and win-rate for the Sales Engine module.
+-- ---------------------------------------------------------------------
+
+CREATE VIEW v_sales_funnel AS
+SELECT
+    stage,
+    COUNT(*)                     AS lead_count,
+    COALESCE(SUM(budget_mid), 0) AS pipeline_value
+FROM (
+    SELECT
+        CASE status
+            WHEN 'new'                  THEN 'new'
+            WHEN 'contacted'            THEN 'qualified'
+            WHEN 'qualified'            THEN 'qualified'
+            WHEN 'site_visit_scheduled' THEN 'visit_scheduled'
+            WHEN 'booking_initiated'    THEN 'booked'
+            WHEN 'won'                  THEN 'won'
+            WHEN 'lost'                 THEN 'lost'
+        END          AS stage,
+        COALESCE(budget_min, budget_max) AS budget_mid
+    FROM leads
+    WHERE status <> 'duplicate'
+) funnel
+GROUP BY stage;
+
+CREATE VIEW v_sales_source_mix AS
+SELECT
+    ls.channel      AS source,
+    ls.name         AS source_name,
+    COUNT(l.id)     AS lead_count
+FROM leads l
+JOIN lead_sources ls ON ls.id = l.lead_source_id
+GROUP BY ls.channel, ls.name;
+
+CREATE VIEW v_sales_win_rate AS
+SELECT
+    COUNT(*) FILTER (WHERE status = 'won')                     AS won_count,
+    COUNT(*) FILTER (WHERE status IN ('won','lost'))           AS decided_count,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'won')
+        / NULLIF(COUNT(*) FILTER (WHERE status IN ('won','lost')), 0), 1) AS win_rate_pct
+FROM leads;
+
+-- ---------------------------------------------------------------------
 -- 15. AI LAYER
 -- ---------------------------------------------------------------------
 
@@ -1556,7 +1656,7 @@ CREATE TABLE vector_documents (
     source_row_id  uuid NOT NULL,
     doc_type       varchar(60) NOT NULL,
     content        text NOT NULL,
-    embedding      vector(1536),
+    embedding      jsonb,
     metadata_json  jsonb NOT NULL DEFAULT '{}'::jsonb,
     indexed_at     timestamptz NOT NULL DEFAULT now()
 );
@@ -1630,6 +1730,50 @@ ALTER TABLE units
 ALTER TABLE payment_schedule_lines
     ADD CONSTRAINT fk_psl_milestone
     FOREIGN KEY (milestone_id) REFERENCES construction_milestones(id);
+
+-- ---------------------------------------------------------------------
+-- 18. DEMO / DISPLAY COLUMNS
+-- Small additive columns backing the interactive demo UI. All are
+-- optional and do not change core transactional semantics.
+-- ---------------------------------------------------------------------
+
+ALTER TABLE projects        ADD COLUMN IF NOT EXISTS location varchar(200);
+ALTER TABLE leads           ADD COLUMN IF NOT EXISTS sales_stage varchar(30);
+
+ALTER TABLE dprs            ADD COLUMN IF NOT EXISTS labour int;
+ALTER TABLE dprs            ADD COLUMN IF NOT EXISTS concrete_cum numeric(12,2);
+
+ALTER TABLE vendors         ADD COLUMN IF NOT EXISTS category varchar(120);
+ALTER TABLE vendors         ADD COLUMN IF NOT EXISTS city varchar(120);
+
+ALTER TABLE rfqs            ADD COLUMN IF NOT EXISTS category varchar(120);
+ALTER TABLE rfqs            ADD COLUMN IF NOT EXISTS best_rate numeric(19,2);
+ALTER TABLE rfqs            ADD COLUMN IF NOT EXISTS market_index numeric(19,2);
+ALTER TABLE rfqs            ADD COLUMN IF NOT EXISTS ai_flag boolean NOT NULL DEFAULT false;
+ALTER TABLE rfqs            ADD COLUMN IF NOT EXISTS ai_note text;
+ALTER TABLE rfqs            ADD COLUMN IF NOT EXISTS responses int NOT NULL DEFAULT 0;
+
+ALTER TABLE grns            ADD COLUMN IF NOT EXISTS match_type varchar(20);
+ALTER TABLE grns            ADD COLUMN IF NOT EXISTS variance_pct numeric(8,2);
+
+ALTER TABLE quotations
+    ADD COLUMN IF NOT EXISTS land_parcel_id uuid REFERENCES land_parcels(id);
+ALTER TABLE quotations
+    ADD COLUMN IF NOT EXISTS plot_id uuid REFERENCES plots(id);
+ALTER TABLE quotations ALTER COLUMN unit_id DROP NOT NULL;
+ALTER TABLE quotations ALTER COLUMN project_id DROP NOT NULL;
+
+ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS rfq_no varchar(40);
+
+ALTER TABLE marketplace_partners ADD COLUMN IF NOT EXISTS city varchar(120);
+ALTER TABLE marketplace_partners ADD COLUMN IF NOT EXISTS rating numeric(2,1) NOT NULL DEFAULT 0;
+ALTER TABLE marketplace_partners ADD COLUMN IF NOT EXISTS deals int NOT NULL DEFAULT 0;
+ALTER TABLE marketplace_partners ADD COLUMN IF NOT EXISTS conversion numeric(5,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE lead_referrals ADD COLUMN IF NOT EXISTS revenue numeric(19,2);
+ALTER TABLE lead_referrals ADD COLUMN IF NOT EXISTS ai_score numeric(5,2);
+
+ALTER TABLE contract_labour ADD COLUMN IF NOT EXISTS attendance_pct numeric(5,2) NOT NULL DEFAULT 0;
 
 -- =====================================================================
 -- END OF TENANT SCHEMA TEMPLATE

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantData, setTenant } from "@/lib/mock-store";
+import { getTenantData, setTenant } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return NextResponse.json({ data: getTenantData() });
+export async function GET() {
+  return NextResponse.json({ data: await getTenantData() });
 }
 
 export async function POST(req: Request) {
@@ -20,9 +20,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "tenantId required" }, { status: 400 });
   }
 
-  const tenant = setTenant(body.tenantId);
+  const tenant = await setTenant(body.tenantId);
   if (!tenant) {
     return NextResponse.json({ error: "tenant not found" }, { status: 404 });
   }
-  return NextResponse.json({ data: getTenantData() });
+  return NextResponse.json({ data: await getTenantData() });
 }

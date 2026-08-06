@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { updateLeadStatus, assignLead } from "@/lib/mock-store";
+import { updateLeadStatus, assignLead } from "@/lib/repo";
 import type { LeadStatus } from "@/lib/data";
 
 export const runtime = "nodejs";
@@ -15,8 +15,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ leadId: strin
   }
 
   let lead = null;
-  if (body.status) lead = updateLeadStatus(leadId, body.status);
-  if (body.assigned) lead = assignLead(leadId, body.assigned);
+  if (body.status) lead = await updateLeadStatus(leadId, body.status);
+  if (body.assigned) lead = await assignLead(leadId, body.assigned);
 
   if (!lead) {
     return NextResponse.json({ error: "lead not found or no update provided" }, { status: 404 });

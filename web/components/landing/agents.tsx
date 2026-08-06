@@ -24,9 +24,9 @@ const agents = [
     tone: "bg-success-soft text-success",
     title: "AI Finance Agent",
     summary:
-      "Forecasts cash flow and flags budget variance before it lands on the P&L.",
-    points: ["Collection-pattern cash forecasting", "BOQ baseline vs. actual material spend"],
-    tools: "Time-series · Python runtimes",
+      "Forecasts cash flow, flags budget variance before it lands on the P&L, and acts on overdue invoices.",
+    points: ["Collection-pattern cash forecasting", "BOQ baseline vs. actual material spend", "Payment-reminder emails queued for overdue invoices"],
+    tools: "Time-series · Resend outbox",
   },
   {
     icon: Scale,
@@ -51,9 +51,9 @@ const agents = [
     tone: "bg-teal-soft text-teal",
     title: "AI Customer Agent",
     summary:
-      "Handles every buyer on WhatsApp — payments, documents and construction updates.",
-    points: ["Payment-schedule answers & reminders", "Receipts, e-sign links & photo updates"],
-    tools: "WhatsApp Business · Notifications",
+      "Handles every buyer on WhatsApp — and follows up payment reminders by email.",
+    points: ["Payment-schedule answers & reminders", "Receipts, e-sign links & photo updates", "Overdue-invoice reminder emails via a shared outbox"],
+    tools: "WhatsApp Business · Resend emails",
   },
 ];
 
@@ -69,7 +69,10 @@ export function Agents() {
           <p className="mt-4 text-base leading-relaxed text-text-muted">
             Six specialised agents — coordinated on LangGraph — share one
             transactional database, so decisions made on the sales floor are
-            instantly visible to finance, construction and legal.
+            instantly visible to finance, construction and legal. Every agent
+            runs inside its workspace, scoped to a single tenant&apos;s schema,
+            with email actions (welcome kit, resets, payment reminders) flowing
+            through EstateFlow&apos;s own Resend-backed outbox.
           </p>
         </div>
 

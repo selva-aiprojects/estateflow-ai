@@ -9,6 +9,7 @@ const exampleQueries = [
   "How many premium 3BHK units will remain unsold in Project Elevate next quarter?",
   "Show collections variance for July vs payment schedule",
   "Which towers have more than 20% units blocked?",
+  "Which customers have overdue invoices, and has the reminder email been sent?",
 ];
 
 interface QueryResult {
@@ -26,6 +27,15 @@ const mockResults: Record<string, QueryResult> = {
     columns: ["Project", "Unit Type", "Available Now", "Velocity (qtr)", "Projected Unsold"],
     rows: [
       ["Elevate Residences", "3BHK", 14, 41, "≈ 0 (sell-through) "],
+    ],
+  },
+  "Which customers have overdue invoices, and has the reminder email been sent?": {
+    summary:
+      "3 invoices are past due, headed by RINV-2026-064 (₹72,000, due 30 Jul). The Finance Agent queued payment-reminder emails through the Resend outbox — deliveries are confirmed with provider IDs and logged in the audit trail.",
+    sql: "SELECT i.invoice_no, i.due_date, i.total, c.primary_email, o.status FROM invoices i JOIN customers c ON i.customer_id = c.id LEFT JOIN email_outbox o ON o.subject LIKE '%' || i.invoice_no || '%' WHERE i.status = 'issued' AND i.due_date < now();",
+    columns: ["Invoice", "Due", "Amount", "Email", "Reminder"],
+    rows: [
+      ["RINV-2026-064", "30 Jul", 72000, "anil.kapoor@example.in", "sent · 5 min ago"],
     ],
   },
   default: {

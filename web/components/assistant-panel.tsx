@@ -3,18 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, User, Send, Check, Copy, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { aiAgentChat } from "@/lib/data";
 import { useApiData, apiSend } from "@/lib/api-client";
 
 export function AssistantPanel() {
-  const [chat, setChat] = useApiData<{ from: "user" | "ai"; text: string }[]>(
-    "/api/ai/chat",
-    aiAgentChat as { from: "user" | "ai"; text: string }[],
-  );
+  const [chat, setChat] = useApiData<{ from: "user" | "ai"; text: string }[]>("/api/ai/chat");
   const [messages, setMessages] = useState<{ from: "user" | "ai"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chat && messages.length === 0) setMessages(chat.slice(0, 4));
+  }, [chat]);
 
   const send = (text: string) => {
     if (!text.trim() || thinking) return;
@@ -31,7 +31,7 @@ export function AssistantPanel() {
         text: "Confirmed. I've synced this with the booking engine and WhatsApp. Would you like me to send a payment-plan PDF as well?",
       };
       setMessages((m) => [...m, reply]);
-      setChat((c) => [...c, { from: "user", text }, reply]);
+      setChat((c) => (c ? [...c, { from: "user", text }, reply] : [{ from: "user", text }, reply]));
       setThinking(false);
     }, 1200);
   };
@@ -40,7 +40,7 @@ export function AssistantPanel() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinking]);
 
-  const seed = aiAgentChat[0];
+  const seedText = chat?.[0]?.text ?? "Confirm the booking…";
 
   return (
     <div className="flex h-full flex-col">
@@ -102,7 +102,7 @@ export function AssistantPanel() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send(input)}
             rows={1}
-            placeholder={messages.length === 0 ? `Reply as Priya… "${seed.text}"` : "Reply as the customer…"}
+            placeholder={messages.length === 0 ? `Reply as Priya… "${seedText}"` : "Reply as the customer…"}
             className="max-h-24 flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           <button

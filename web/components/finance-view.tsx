@@ -1,28 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Sparkles, AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, TrendingUp, ReceiptText } from "lucide-react";
-import { financeRecon, reconciliationSummary, cashFlowData, salesVelocity } from "@/lib/data";
 import { useApiData, apiSend } from "@/lib/api-client";
 import { inrCompact, inr } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { PageSkeleton } from "@/components/loading";
 import { Badge, Button, Card, CardHeader, PageHeader, Spinner } from "@/components/ui";
 import { CashFlowChart, BarChart } from "@/components/charts";
 
+interface ReconRow {
+  ref: string;
+  date: string;
+  desc: string;
+  amount: number;
+  type: "in" | "out";
+  matched: boolean;
+  confidence: number;
+}
+
+interface FinancePayload {
+  recon: ReconRow[];
+  summary: { matched: number; total: number; matchRate: number; pendingAmount: number; pending: number };
+  cashFlow: { month: string; inflow: number; outflow: number }[];
+  salesVelocity: { month: string; units: number }[];
+}
+
 export function FinanceView() {
-  const [finance] = useApiData("/api/finance", {
-    recon: financeRecon,
-    summary: reconciliationSummary,
-    cashFlow: cashFlowData,
-    salesVelocity,
-  });
-  const { summary, cashFlow, salesVelocity: velocity } = finance;
-  const [matched, setMatched] = useApiData(
-    "/api/finance",
-    financeRecon as { ref: string; date: string; desc: string; amount: number; type: "in" | "out"; matched: boolean; confidence: number }[],
-  );
+  const [finance] = useApiData<FinancePayload>("/api/finance");
+  const [matched, setMatched] = useState<ReconRow[] | null>(null);
   const [autoMatch, setAutoMatch] = useState(false);
 
+  useEffect(() => {
+    if (finance) setMatched(finance.recon);
+  }, [finance]);
+
+  if (!finance || !matched) return <PageSkeleton />;
+
+  const { summary, cashFlow, salesVelocity: velocity } = finance;
   const pending = matched.filter((r) => !r.matched);
   const aiSuggest = () => {
     setAutoMatch(true);
@@ -35,10 +50,10 @@ export function FinanceView() {
         },
       )
         .then((row) => {
-          setMatched((rows) => rows.map((r) => (r.ref === row.ref ? { ...r, matched: true, confidence: row.confidence, desc: row.desc } : r)));
+          setMatched((rows) => (rows ? rows.map((r) => (r.ref === row.ref ? { ...r, matched: true, confidence: row.confidence, desc: row.desc } : r)) : rows));
         })
         .catch(() => {
-          setMatched((rows) => rows.map((r) => (r.ref === "SBI/MT940/0804-011" ? { ...r, matched: true, confidence: 97.1, desc: "NEFT — Priya Sharma (token · T1-02-C)" } : r)));
+          setMatched((rows) => (rows ? rows.map((r) => (r.ref === "SBI/MT940/0804-011" ? { ...r, matched: true, confidence: 97.1, desc: "NEFT — Priya Sharma (token · T1-02-C)" } : r)) : rows));
         });
     }, 1100);
   };

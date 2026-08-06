@@ -168,6 +168,8 @@ export function Input({
   hint,
   prefix,
   suffix,
+  type = "text",
+  autoComplete,
 }: {
   label?: string;
   value: string;
@@ -176,6 +178,8 @@ export function Input({
   hint?: string;
   prefix?: string;
   suffix?: string;
+  type?: string;
+  autoComplete?: string;
 }) {
   return (
     <label className="block">
@@ -183,6 +187,8 @@ export function Input({
       <div className="flex items-center rounded-md border border-border bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200">
         {prefix && <span className="pl-3 text-sm text-text-subtle">{prefix}</span>}
         <input
+          type={type}
+          autoComplete={autoComplete}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
