@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { X, Building2, CalendarClock, FileText, Info, Lock, RefreshCw } from "lucide-react";
-import { projects, unitStatusMeta, type Unit, type UnitStatus } from "@/lib/data";
+import { projects as seedProjects, unitStatusMeta, type Unit, type UnitStatus } from "@/lib/data";
+import { useApiData, apiSend } from "@/lib/api-client";
 import { inr, inrCompact } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Badge, Button, Card, Select } from "@/components/ui";
 
 export function InventoryMap() {
+  const [inventory] = useApiData("/api/inventory", { projects: seedProjects });
+  const { projects } = inventory;
   const [projectId, setProjectId] = useState(projects[0].id);
   const [towerId, setTowerId] = useState(projects[0].towers[0].id);
   const [selected, setSelected] = useState<Unit | null>(null);
@@ -30,6 +33,10 @@ export function InventoryMap() {
 
   const startHold = () => {
     if (!selected) return;
+    apiSend<{ locked: boolean; expiresAt: number }>(`/api/inventory/${selected.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ hold: true, heldBy: "demo-sales-executive" }),
+    }).catch(() => {});
     setHeld(selected);
     setHoldSeconds(15 * 60);
     const id = setInterval(() => {

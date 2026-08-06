@@ -1,9 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FilePlus2, CheckCircle2, XCircle, Clock, ShieldAlert, X, TrendingUp } from "lucide-react";
-import { projects, quotes, quoteStatusMeta, type Quote, type QuoteStatus } from "@/lib/data";
-import { inr } from "@/lib/format";
+import { FilePlus2, CheckCircle2, XCircle, Clock, ShieldAlert, X, TrendingUp, Map, Building2 } from "lucide-react";
+import {
+  projects as seedProjects,
+  quotes as seedQuotes,
+  landParcels as seedLandParcels,
+  plotLayouts as seedPlotLayouts,
+  quoteStatusMeta,
+  type Quote,
+  type QuoteStatus,
+  type Project,
+  type Segment,
+} from "@/lib/data";
+import { useApiData, apiSend } from "@/lib/api-client";
+import { inr, formatAcres } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar, Badge, Button, Card, CardHeader, Input, PageHeader, Select, Spinner } from "@/components/ui";
 
@@ -16,11 +27,20 @@ const toneMap: Record<string, "muted" | "primary" | "success" | "warning" | "dan
   info: "info",
 };
 
+interface QuoteResponse {
+  quote: Quote;
+  needsApproval: boolean;
+}
+
 export function QuotesView() {
-  const [rows, setRows] = useState<Quote[]>(quotes);
+  const [rows, setRows] = useApiData<Quote[]>("/api/quotes", seedQuotes);
+  const [inventory] = useApiData("/api/inventory", { projects: seedProjects });
+  const { projects } = inventory;
   const [showBuilder, setShowBuilder] = useState(false);
+  const [segment, setSegment] = useState<Segment>("apartments");
   const [projectId, setProjectId] = useState(projects[0].id);
   const [unitId, setUnitId] = useState("");
+  const [landId, setLandId] = useState("");
   const [discount, setDiscount] = useState("2.0");
   const [customer, setCustomer] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -31,9 +51,24 @@ export function QuotesView() {
     return p.towers.flatMap((t) => t.units.filter((u) => u.status === "available" || u.status === "token_paid"));
   }, [projectId]);
 
+  const landAssets = useMemo(() => {
+    const parcels = seedLandParcels.map((p) => ({
+      id: p.id,
+      kind: "parcel" as const,
+      label: `${p.code} · ${p.name} · ${formatAcres(p.acres)}`,
+      base: p.acres * p.ratePerAcre,
+    }));
+    const plots = seedPlotLayouts
+      .flatMap((l) => l.plots)
+      .filter((p) => p.status === "available" || p.status === "token_paid")
+      .map((p) => ({ id: p.id, kind: "plot" as const, label: `${p.no} · ${p.zone} plot · ${p.sqft} sq.ft`, base: p.price }));
+    return [...parcels, ...plots];
+  }, []);
+
   const selectedUnit = units.find((u) => u.id === unitId);
+  const selectedLand = landAssets.find((a) => a.id === landId);
   const discountNum = parseFloat(discount) || 0;
-  const base = selectedUnit?.price ?? 0;
+  const base = segment === "land" ? (selectedLand?.base ?? 0) : (selectedUnit?.price ?? 0);
   const total = base - (base * discountNum) / 100;
   const needsApproval = discountNum > 5;
   const [apprId, setApprId] = useState<string | null>(null);
@@ -41,40 +76,50 @@ export function QuotesView() {
   const pending = rows.filter((r) => r.status === "pending_approval");
 
   const submitQuote = () => {
-    if (!selectedUnit) return;
+    if (segment === "land" ? !selectedLand : !selectedUnit) return;
     setSubmitting(true);
     setTimeout(() => {
-      const p = projects.find((x) => x.id === projectId)!;
-      const newQuote: Quote = {
-        id: `q-${Date.now()}`,
-        quoteNo: `QT-2026-${(870 + rows.length + 2).toString().padStart(4, "0")}`,
-        customer: customer || "New Customer",
-        project: p.name,
-        unit: selectedUnit!.no,
-        base,
-        discountPct: discountNum,
-        total,
-        status: needsApproval ? "pending_approval" : "draft",
-        salesExecutive: "Arjun Nair",
-        createdAt: new Date().toISOString(),
-      };
-      setRows((r) => [newQuote, ...r]);
-      setSubmitting(false);
-      setShowBuilder(false);
-      setCustomer("");
-      setDiscount("2.0");
-      setUnitId("");
-      setToast(
-        needsApproval
-          ? "Discount exceeds 5% — Temporal workflow paused booking. Approval routed to VP of Sales."
-          : "Quote saved as draft. Redis hold active on this unit for 15 minutes.",
-      );
-      setTimeout(() => setToast(null), 5000);
+      apiSend<QuoteResponse>("/api/quotes", {
+        method: "POST",
+        body: JSON.stringify({
+          customer: customer || "New Customer",
+          segment,
+          ...(segment === "land"
+            ? { landId: selectedLand!.id, landKind: selectedLand!.kind }
+            : { projectId, unitId: selectedUnit!.id }),
+          discountPct: discountNum,
+          salesExecutive: "Arjun Nair",
+        }),
+      })
+        .then((res) => {
+          setRows((r) => [res.quote, ...r]);
+          setSubmitting(false);
+          setShowBuilder(false);
+          setCustomer("");
+          setDiscount("2.0");
+          setUnitId("");
+          setLandId("");
+          setToast(
+            res.needsApproval
+              ? "Discount exceeds 5% — Temporal workflow paused booking. Approval routed to VP of Sales."
+              : "Quote saved as draft. Redis hold active on this asset for 15 minutes.",
+          );
+          setTimeout(() => setToast(null), 5000);
+        })
+        .catch(() => {
+          setSubmitting(false);
+          setToast("API unavailable — quote not persisted (demo offline).");
+          setTimeout(() => setToast(null), 4000);
+        });
     }, 1200);
   };
 
   const decide = (id: string, approve: boolean) => {
     setRows((r) => r.map((q) => (q.id === id ? { ...q, status: approve ? "approved" : "cancelled" } : q)));
+    apiSend<Quote>(`/api/quotes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: approve ? "approve" : "reject" }),
+    }).catch(() => {});
     setToast(approve ? "Approved. Booking unblocked and notification sent to Sales Executive." : "Approval rejected. Booking remained blocked.");
     setTimeout(() => setToast(null), 4000);
   };
@@ -141,14 +186,24 @@ export function QuotesView() {
             <tbody>
               {rows.map((q) => (
                 <tr key={q.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-surface-muted/40">
-                  <td className="px-4 py-3 font-medium text-primary">{q.quoteNo}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-primary">{q.quoteNo}</span>
+                      <Badge tone={q.segment === "land" ? "success" : "primary"}>{q.segment === "land" ? "Land" : "Home"}</Badge>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Avatar name={q.customer} size="sm" />
                       <span className="text-text">{q.customer}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-text-muted">{q.project} · {q.unit}</td>
+                  <td className="px-4 py-3 text-text-muted">
+                    <span className="flex items-center gap-1.5">
+                      {q.segment === "land" ? <Map size={13} className="text-success" /> : <Building2 size={13} className="text-primary" />}
+                      {q.project} · {q.unit}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-text tabular-nums">{inr(q.base, 0)}</td>
                   <td className={cn("px-4 py-3 tabular-nums font-medium", q.discountPct > 5 ? "text-danger" : "text-text")}>{q.discountPct}%</td>
                   <td className="px-4 py-3 text-text tabular-nums font-medium">{inr(q.total, 0)}</td>
@@ -171,7 +226,7 @@ export function QuotesView() {
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
                 <h3 className="text-base font-semibold text-text">New Quotation</h3>
-                <p className="text-xs text-text-muted">Redis will hold the unit for 15 minutes</p>
+                <p className="text-xs text-text-muted">Redis will hold the unit / parcel for 15 minutes</p>
               </div>
               <button onClick={() => setShowBuilder(false)} aria-label="Close" className="rounded-md p-1.5 text-text-subtle hover:bg-surface-muted transition-colors cursor-pointer">
                 <X size={17} />
@@ -179,29 +234,61 @@ export function QuotesView() {
             </div>
 
             <div className="space-y-4 px-5 py-5">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Select
-                  label="Project"
-                  value={projectId}
-                  onChange={(v) => {
-                    setProjectId(v);
-                    setUnitId("");
-                  }}
-                  options={projects.map((p) => ({ value: p.id, label: p.name }))}
-                />
-                <Select
-                  label="Available Unit"
-                  value={unitId}
-                  onChange={setUnitId}
-                  options={units.map((u) => ({ value: u.id, label: `${u.no} · ${u.type} · ${u.sqft} sq.ft` }))}
-                />
+              <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-surface-muted/40 p-1">
+                <button
+                  onClick={() => setSegment("apartments")}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer",
+                    segment === "apartments" ? "bg-surface text-text shadow-sm" : "text-text-muted hover:text-text",
+                  )}
+                >
+                  <Building2 size={14} /> Apartments
+                </button>
+                <button
+                  onClick={() => setSegment("land")}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer",
+                    segment === "land" ? "bg-surface text-text shadow-sm" : "text-text-muted hover:text-text",
+                  )}
+                >
+                  <Map size={14} /> Land
+                </button>
               </div>
+
+              {segment === "land" ? (
+                <Select
+                  label="Land Asset"
+                  value={landId}
+                  onChange={setLandId}
+                  options={landAssets.map((a) => ({ value: a.id, label: a.label }))}
+                />
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Select
+                    label="Project"
+                    value={projectId}
+                    onChange={(v) => {
+                      setProjectId(v);
+                      setUnitId("");
+                    }}
+                    options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                  />
+                  <Select
+                    label="Available Unit"
+                    value={unitId}
+                    onChange={setUnitId}
+                    options={units.map((u) => ({ value: u.id, label: `${u.no} · ${u.type} · ${u.sqft} sq.ft` }))}
+                  />
+                </div>
+              )}
               <Input label="Customer name" value={customer} onChange={setCustomer} placeholder="e.g. Rohan Mehta" />
               <Input label="Discount (%)" value={discount} onChange={setDiscount} suffix="%" hint={discountNum > 5 ? "Exceeds 5% — approval required" : "Within sales authority"} />
 
               <div className="rounded-lg bg-surface-muted/60 p-4">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-muted">Base price ({selectedUnit ? `${selectedUnit.type} · ${selectedUnit.sqft} sq.ft` : "—"})</span>
+                  <span className="text-text-muted">
+                    Base price ({segment === "land" ? (selectedLand ? `${selectedLand.label.split("·")[0].trim()} · ${selectedLand.label.split("·")[1].trim()}` : "—") : selectedUnit ? `${selectedUnit.type} · ${selectedUnit.sqft} sq.ft` : "—"})
+                  </span>
                   <span className="font-medium text-text tabular-nums">{inr(base, 0)}</span>
                 </div>
                 <div className="mt-1.5 flex items-center justify-between text-sm">
@@ -224,7 +311,7 @@ export function QuotesView() {
               )}
 
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={submitQuote} disabled={!selectedUnit || submitting}>
+                <Button className="flex-1" onClick={submitQuote} disabled={(segment === "land" ? !selectedLand : !selectedUnit) || submitting}>
                   {submitting && <Spinner />}
                   {submitting ? "Submitting…" : needsApproval ? "Submit for Approval" : "Save Draft Quote"}
                 </Button>

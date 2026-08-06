@@ -12,6 +12,12 @@ export const inrCompact = (value: number) => {
   return inr(value);
 };
 
+export const formatAcres = (acres: number, guntas = 0) => {
+  const whole = Number.isInteger(acres) ? acres : acres.toFixed(2);
+  if (guntas) return `${whole} ac ${guntas} gu`;
+  return `${whole} ac`;
+};
+
 export const formatDate = (date: string | Date, opts?: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",

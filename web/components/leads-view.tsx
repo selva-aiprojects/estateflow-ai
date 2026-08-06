@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Bot, PhoneCall, Mail, MapPin, X, Wand2, CheckCircle2 } from "lucide-react";
-import { leads, leadStatusMeta, type Lead, type LeadStatus } from "@/lib/data";
+import { leads as seedLeads, leadStatusMeta, type Lead, type LeadStatus } from "@/lib/data";
+import { useApiData, apiSend } from "@/lib/api-client";
 import { inr, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar, Badge, Button, Card, PageHeader, Spinner } from "@/components/ui";
@@ -29,9 +30,9 @@ const tabs: { id: LeadStatus | "all"; label: string }[] = [
 const scoreTone = (s: number) => (s >= 80 ? "success" : s >= 65 ? "warning" : "muted");
 
 export function LeadsView() {
+  const [leads, setLeads] = useApiData<Lead[]>("/api/leads", seedLeads);
   const [tab, setTab] = useState<LeadStatus | "all">("all");
   const [selected, setSelected] = useState<Lead | null>(null);
-  const [assigned, setAssigned] = useState<Record<string, string>>({});
   const [scoring, setScoring] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -46,12 +47,28 @@ export function LeadsView() {
 
   const filtered = useMemo(() => (tab === "all" ? leads : leads.filter((l) => l.status === tab)), [tab]);
 
+  const setStatus = (id: string, status: LeadStatus) => {
+    setLeads((rows) => rows.map((l) => (l.id === id ? { ...l, status } : l)));
+    apiSend<Lead>(`/api/leads/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }).catch(() => {});
+  };
+
   const assignLead = (l: Lead) => {
-    const next = assigned[l.id] ? "" : "Arjun Nair";
-    setAssigned((a) => ({ ...a, [l.id]: next }));
+    const next = l.assigned === "Arjun Nair" ? "" : "Arjun Nair";
+    const assign = (label: string) =>
+      setLeads((rows) => rows.map((x) => (x.id === l.id ? { ...x, assigned: label } : x)));
+    assign(next);
+    apiSend<Lead>(`/api/leads/${l.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ assigned: next || "Unassigned" }),
+    })
+      .then((updated) => setLeads((rows) => rows.map((x) => (x.id === updated.id ? updated : x))))
+      .catch(() => {});
     if (next) {
       setTimeout(() => {
-        setAssigned((a) => ({ ...a, [l.id]: "Arjun Nair ✓" }));
+        setLeads((rows) => rows.map((x) => (x.id === l.id ? { ...x, assigned: "Arjun Nair" } : x)));
       }, 800);
     }
   };
@@ -102,7 +119,7 @@ export function LeadsView() {
             </thead>
             <tbody>
               {filtered.map((l) => {
-                const assignedTo = assigned[l.id] ? (assigned[l.id].endsWith("✓") ? "Arjun Nair" : assigned[l.id]) : l.assigned;
+                const assignedTo = l.assigned;
                 return (
                   <tr
                     key={l.id}
@@ -116,6 +133,7 @@ export function LeadsView() {
                           <p className="font-medium text-text">{l.name}</p>
                           <p className="text-xs text-text-subtle tabular-nums">{l.phone}</p>
                         </div>
+                        <Badge tone={l.segment === "land" ? "success" : "primary"} className="ml-auto">{l.segment === "land" ? "Land" : "Home"}</Badge>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -149,8 +167,8 @@ export function LeadsView() {
                         }}
                         className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-muted transition-colors hover:border-primary hover:text-primary cursor-pointer"
                       >
-                        {assigned[l.id]?.endsWith("✓") ? <CheckCircle2 size={12} className="text-success" /> : <Wand2 size={12} />}
-                        {assigned[l.id]?.endsWith("✓") ? "Assigned" : assigned[l.id] ? "Reassign" : "Round-robin"}
+                        {assignedTo === "Arjun Nair" ? <CheckCircle2 size={12} className="text-success" /> : <Wand2 size={12} />}
+                        {assignedTo === "Arjun Nair" ? "Assigned" : l.assigned ? "Reassign" : "Round-robin"}
                       </button>
                     </td>
                   </tr>
@@ -235,8 +253,8 @@ export function LeadsView() {
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1">Move to Qualified</Button>
-                <Button variant="secondary">Mark Lost</Button>
+                <Button className="flex-1" onClick={() => setStatus(selected.id, "qualified")}>Move to Qualified</Button>
+                <Button variant="secondary" onClick={() => setStatus(selected.id, "lost")}>Mark Lost</Button>
               </div>
             </div>
           </div>

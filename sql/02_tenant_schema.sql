@@ -6,9 +6,9 @@
 -- migration runner). No tenant_id columns are required because the
 -- schema itself defines the tenant boundary.
 --
--- Modules: Common · RBAC · CRM · Inventory · Sales · Construction ·
--- Procurement · Finance · Legal/RERA · HR · Customer · Facility ·
--- Rental · Marketplace · AI · Notifications
+-- Modules: Common · RBAC · CRM · Inventory · Land Portfolio · Sales ·
+-- Construction · Procurement · Finance · Legal/RERA · HR · Customer ·
+-- Facility · Rental · Marketplace · AI · Notifications
 -- =====================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -360,6 +360,115 @@ CREATE TABLE price_list_items (
     status        varchar(20) NOT NULL DEFAULT 'active'
                               CHECK (status IN ('active','inactive'))
 );
+
+-- ---------------------------------------------------------------------
+-- 4b. LAND PORTFOLIO (Land segment)
+-- Parcels, plotted layouts, title diligence and land-specific holds.
+-- These are independent of towers/blocks and drive the Land module.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE land_status (
+    code  varchar(30) PRIMARY KEY,
+    name  varchar(60) NOT NULL,
+    color varchar(9) NOT NULL
+);
+
+INSERT INTO land_status (code, name, color) VALUES
+    ('available',  'Available',   '#22c55e'),
+    ('hold',       'On Hold',     '#eab308'),
+    ('token_paid', 'Token Paid',  '#3b82f6'),
+    ('registered', 'Registered',  '#a855f7'),
+    ('sold',       'Sold',        '#ef4444');
+
+CREATE TABLE land_zoning (
+    code varchar(30) PRIMARY KEY,
+    name varchar(120) NOT NULL
+);
+
+INSERT INTO land_zoning (code, name) VALUES
+    ('NA_Residential', 'Non-agricultural Residential'),
+    ('Agricultural',   'Agricultural'),
+    ('Industrial',     'Industrial'),
+    ('Mixed_Use',      'Mixed Use'),
+    ('Commercial',     'Commercial');
+
+CREATE TABLE land_parcels (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    code            varchar(40) NOT NULL UNIQUE,
+    name            varchar(200) NOT NULL,
+    village         varchar(120),
+    district        varchar(120),
+    state           varchar(60) NOT NULL DEFAULT 'Karnataka',
+    survey_no       varchar(120),
+    total_acres     numeric(19,4) NOT NULL,
+    total_guntas    int NOT NULL DEFAULT 0,
+    rate_per_acre   numeric(19,2) NOT NULL,
+    zoning          varchar(30) REFERENCES land_zoning(code),
+    title_status    varchar(30) NOT NULL DEFAULT 'in_review'
+                              CHECK (title_status IN ('in_review','clear','litigation','disputed')),
+    title_notes     text,
+    seller          varchar(200),
+    docs_count      int NOT NULL DEFAULT 0,
+    status          varchar(30) NOT NULL DEFAULT 'available' REFERENCES land_status(code),
+    status_changed_at timestamptz NOT NULL DEFAULT now(),
+    current_booking_id uuid,
+    version         int NOT NULL DEFAULT 1,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_land_parcels_status ON land_parcels(status);
+
+CREATE TABLE land_parcel_documents (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    parcel_id     uuid NOT NULL REFERENCES land_parcels(id) ON DELETE CASCADE,
+    file_asset_id uuid REFERENCES file_assets(id),
+    doc_type      varchar(60) NOT NULL,
+    title         varchar(255) NOT NULL,
+    verification_status varchar(20) NOT NULL DEFAULT 'pending'
+                        CHECK (verification_status IN ('pending','verified','flagged','rejected')),
+    verified_by   uuid,
+    verified_at   timestamptz
+);
+
+CREATE TABLE plot_layouts (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    parcel_id  uuid NOT NULL REFERENCES land_parcels(id) ON DELETE CASCADE,
+    name       varchar(200) NOT NULL,
+    total_plots int NOT NULL DEFAULT 0,
+    approved_on date,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE plots (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    layout_id   uuid NOT NULL REFERENCES plot_layouts(id) ON DELETE CASCADE,
+    plot_no     varchar(20) NOT NULL,
+    zone        varchar(40) NOT NULL CHECK (zone IN ('residential','villa','commercial')),
+    area_sqft   numeric(19,2) NOT NULL,
+    price       numeric(19,2) NOT NULL,
+    status      varchar(30) NOT NULL DEFAULT 'available' REFERENCES unit_status(code),
+    status_changed_at timestamptz NOT NULL DEFAULT now(),
+    current_booking_id uuid,
+    UNIQUE (layout_id, plot_no)
+);
+
+CREATE INDEX idx_plots_layout_status ON plots(layout_id, status);
+
+CREATE TABLE land_holds (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    parcel_id   uuid,
+    plot_id     uuid,
+    quote_id    uuid,
+    held_by     uuid NOT NULL,
+    expires_at  timestamptz NOT NULL,
+    released_at timestamptz,
+    reason      varchar(120),
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    CHECK (num_nonnulls(parcel_id, plot_id) = 1)
+);
+
+CREATE INDEX idx_land_holds_active ON land_holds(parcel_id, plot_id) WHERE released_at IS NULL;
 
 -- ---------------------------------------------------------------------
 -- 5. SALES, QUOTATIONS & COLLECTIONS

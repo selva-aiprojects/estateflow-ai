@@ -21,7 +21,9 @@ CREATE TABLE tenants (
     db_schema     varchar(63)  NOT NULL UNIQUE,
     status        varchar(20)  NOT NULL DEFAULT 'active'
                               CHECK (status IN ('active','suspended','archived','provisioning')),
-    plan_tier     varchar(30)  NOT NULL DEFAULT 'standard',
+    plan_id       varchar(30)  NOT NULL DEFAULT 'plan-enterprise',
+    segments      varchar(20)[] NOT NULL DEFAULT ARRAY['land','apartments']
+                               CHECK (segments <@ ARRAY['land','apartments']::varchar[]),
     region        varchar(30)  NOT NULL DEFAULT 'ap-south-1',
     branding_json jsonb        NOT NULL DEFAULT '{}'::jsonb,
     created_at    timestamptz  NOT NULL DEFAULT now(),

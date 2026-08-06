@@ -3,20 +3,43 @@
 import { useState } from "react";
 import { CheckCircle2, Sparkles, AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, TrendingUp, ReceiptText } from "lucide-react";
 import { financeRecon, reconciliationSummary, cashFlowData, salesVelocity } from "@/lib/data";
+import { useApiData, apiSend } from "@/lib/api-client";
 import { inrCompact, inr } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Badge, Button, Card, CardHeader, PageHeader, Spinner } from "@/components/ui";
 import { CashFlowChart, BarChart } from "@/components/charts";
 
 export function FinanceView() {
-  const [matched, setMatched] = useState(financeRecon);
+  const [finance] = useApiData("/api/finance", {
+    recon: financeRecon,
+    summary: reconciliationSummary,
+    cashFlow: cashFlowData,
+    salesVelocity,
+  });
+  const { summary, cashFlow, salesVelocity: velocity } = finance;
+  const [matched, setMatched] = useApiData(
+    "/api/finance",
+    financeRecon as { ref: string; date: string; desc: string; amount: number; type: "in" | "out"; matched: boolean; confidence: number }[],
+  );
   const [autoMatch, setAutoMatch] = useState(false);
 
   const pending = matched.filter((r) => !r.matched);
   const aiSuggest = () => {
     setAutoMatch(true);
     setTimeout(() => {
-      setMatched((rows) => rows.map((r) => (r.ref === "SBI/MT940/0804-011" ? { ...r, matched: true, confidence: 97.1, desc: "NEFT — Priya Sharma (token · T1-02-C)" } : r)));
+      apiSend<{ ref: string; matched: boolean; confidence: number; desc: string }>(
+        `/api/finance/${encodeURIComponent("SBI/MT940/0804-011")}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ description: "NEFT — Priya Sharma (token · T1-02-C)" }),
+        },
+      )
+        .then((row) => {
+          setMatched((rows) => rows.map((r) => (r.ref === row.ref ? { ...r, matched: true, confidence: row.confidence, desc: row.desc } : r)));
+        })
+        .catch(() => {
+          setMatched((rows) => rows.map((r) => (r.ref === "SBI/MT940/0804-011" ? { ...r, matched: true, confidence: 97.1, desc: "NEFT — Priya Sharma (token · T1-02-C)" } : r)));
+        });
     }, 1100);
   };
 
@@ -46,17 +69,17 @@ export function FinanceView() {
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-soft text-primary">
             <ReceiptText size={16} />
           </div>
-          <p className="mt-3 text-lg font-semibold text-text tabular-nums">{inrCompact(reconciliationSummary.pendingAmount)}</p>
+          <p className="mt-3 text-lg font-semibold text-text tabular-nums">{inrCompact(summary.pendingAmount)}</p>
           <p className="text-xs text-text-muted">Unreconciled inflow</p>
-          <p className="mt-0.5 text-[11px] text-text-subtle tabular-nums">{reconciliationSummary.pending} transactions</p>
+          <p className="mt-0.5 text-[11px] text-text-subtle tabular-nums">{summary.pending} transactions</p>
         </Card>
         <Card className="p-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-muted text-text-muted">
             <TrendingUp size={16} />
           </div>
-          <p className="mt-3 text-lg font-semibold text-text tabular-nums">{reconciliationSummary.matchRate}%</p>
+          <p className="mt-3 text-lg font-semibold text-text tabular-nums">{summary.matchRate}%</p>
           <p className="text-xs text-text-muted">Auto-match rate</p>
-          <p className="mt-0.5 text-[11px] text-text-subtle tabular-nums">{reconciliationSummary.matched} / {reconciliationSummary.total} rows</p>
+          <p className="mt-0.5 text-[11px] text-text-subtle tabular-nums">{summary.matched} / {summary.total} rows</p>
         </Card>
         <Card className="p-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-warning-soft text-warning">
@@ -72,13 +95,13 @@ export function FinanceView() {
         <Card>
           <CardHeader title="Cash Flow Forecast" subtitle="₹ Cr — projected inflows vs. construction outflows" />
           <div className="px-5 pb-5">
-            <CashFlowChart data={cashFlowData} />
+            <CashFlowChart data={cashFlow} />
           </div>
         </Card>
         <Card>
           <CardHeader title="Collections by Quarter" subtitle="Units sold per month (booking → token → instalment)" />
           <div className="px-5 pb-5">
-            <BarChart data={salesVelocity} />
+            <BarChart data={velocity} />
           </div>
         </Card>
       </div>

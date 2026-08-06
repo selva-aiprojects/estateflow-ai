@@ -19,6 +19,13 @@ Product Requirement Document (**PRD**) ## Document Control & Overview
  - Custom AI Workflows        - Custom AI Workflows        - Custom AI Workflows
 Subdomain & Branding: Dynamic routing resolves custom URLs (e.g., builder-a.estateflow.in). The frontend serves tenant-specific assets, logos, and Tailwind color themes fetched at runtime.Database Isolation: A Bridge/Hybrid Isolation Model using PostgreSQL. Each tenant possesses a distinct database schema to prevent cross-tenant data leakage while optimizing infrastructure costs.AI & Vector Storage Isolation: Vector embeddings for internal documents are compartmentalized using isolated metadata tags or separate indices within pgvector or Chroma.
 
+2.1a Subscription Plans & Module GatingEstateFlow sells per-tenant subscription plans that determine which business segments a tenant operates and which modules are enabled in the product shell.**Segments:** `land` (Land deals / parcel & plotted portfolio) and `apartments` (Homes / Apartment & Commercial projects).**Plans:**
+- **Land** — Land-only portfolio. Enables the Land module (parcels, plot layouts, title diligence, land quotes/holds); Homes inventory and construction modules are locked.
+- **Homes** — Apartment & commercial projects only. Enables Inventory Heat Map, Construction/DPR, and related modules; the Land module is locked.
+- **Land + Homes** — Full access to both segments, all modules unlocked.
+
+Gating behavior: the tenant registry stores `plan_id` + `segments[]` (see `sql/01_public_schema.sql`). The shell renders nav items only when the active tenant's plan includes that segment, and an explicit PlanLocked screen (with upgrade CTA) is shown if a user navigates to a locked module. All views still fall back to seed/demo data so a locked module never crashes the demo.
+
 2.2 Core Technology StackFrontend: Next.js 15, React 19, Tailwind CSSBackend: .**NET** 9 Web **API** (C#)Database: PostgreSQL + Entity Framework Core / PrismaCaching & Messaging: Redis (Session/Cache), Kafka or RabbitMQ (Event-driven processing)Orchestration Engine: Temporal (For reliable execution of long-running workflows like procurement approvals and multi-stage billing)AI & **LLM** Orchestration: LangGraph, Semantic Kernel, OpenAI **GPT**-4o, Anthropic Claude 3.5 Sonnet, Google Gemini 1.5 ProVector Database: pgvector (PostgreSQL plugin) or Chroma DBMobile Apps: Flutter (Single codebase for iOS and Android deployment across 7 user personas)Identity Management: Keycloak or Microsoft Entra ID (Supporting multi-tenant **RBAC** and OAuth2/**OIDC**)
 
 ## Epics & Functional Module Requirements
@@ -27,7 +34,9 @@ Epic 1: **CRM** & Omnichannel Lead ManagementRequirement: Ingest, score, and dis
 
 Epic 2: Property & Inventory Lifecycle ManagementRequirement: A hierarchical inventory matrix modeling Projects → Towers → Floors → Blocks → Units.Visual Engine: Real-time Interactive Inventory Heat Maps. Units must dynamically change state color (Green = Available, Yellow = Blocked, Red = Sold, Blue = Token Paid).Concurrency Lock: When a Sales Executive generates a quotation, Redis locks the specific Unit ID for 15 minutes to prevent double-booking.
 
-Epic 3: Sales, Quotations & CollectionsRequirement: Dynamic payment schedule generation compliant with construction milestones or time-linked plans.Approvals: Automated discount thresholds. If a discount is >5%, a Temporal workflow halts the booking and routes an approval notification to the VP of Sales' mobile app.
+Epic 3: Sales, Quotations & CollectionsRequirement: Dynamic payment schedule generation compliant with construction milestones or time-linked plans.Approvals: Automated discount thresholds. If a discount is >5%, a Temporal workflow halts the booking and routes an approval notification to the VP of Sales' mobile app.Quotes are segment-aware: a Land quote references a parcel or plot (`landId` + `landKind`), and creating one places a 15-minute Redis hold on that land asset, mirroring the unit-hold concurrency lock for Homes.
+
+Epic 13: Land Portfolio (Land segment)Requirement: A dedicated Land module for parcel acquisition and plotted-development inventory. It manages land parcels (code, village/survey, acres/guntas, rate per acre, zoning, seller), land status lifecycle (available → hold → token_paid → registered → sold), title diligence (clear / in_review / litigation, document verification, ownership chain), and plotted layouts with per-plot status (available / blocked / token_paid / sold) that feeds the same quote-and-hold pipeline as unit sales.
 
 Epic 4: Construction **ERP** & Site OperationsRequirement: Bill of Quantities (**BOQ**) enforcement and tracking of labor, equipment, and daily progress.Field Execution: Site engineers use the Flutter app to log Daily Progress Reports (**DPR**). They can upload site images directly to S3-compatible storage, which updates the master project timeline.
 

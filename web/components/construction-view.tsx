@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { CheckCircle2, AlertTriangle, Clock, HardHat, Gauge, Mountain, FileText, Eye, ScanEye } from "lucide-react";
-import { milestones, dprRows } from "@/lib/data";
+import { milestones as seedMilestones, dprRows as seedDprRows } from "@/lib/data";
+import { useApiData } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { Badge, Button, Card, CardHeader, PageHeader, Spinner } from "@/components/ui";
 
@@ -14,12 +15,18 @@ const msStatus = {
   delayed: { label: "Delayed", tone: "danger" as const, icon: AlertTriangle },
 };
 
-const towerStats = [
+const seedTowerStats = [
   { tower: "T1", progress: 68.4, lab: 84, concrete: "42 m³", lag: "2 days ahead" },
   { tower: "T2", progress: 61.2, lab: 76, concrete: "35 m³", lag: "0 days ahead" },
 ];
 
 export function ConstructionView() {
+  const [construction] = useApiData("/api/construction", {
+    milestones: seedMilestones,
+    dprRows: seedDprRows,
+    towerStats: seedTowerStats,
+  });
+  const { milestones, dprRows, towerStats } = construction;
   const [photos, setPhotos] = useState(false);
   const [syncing, setSyncing] = useState(false);
 

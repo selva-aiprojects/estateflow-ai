@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Grid3x3,
+  Map,
   Users,
   FileText,
   HardHat,
@@ -17,20 +18,34 @@ import {
   Sparkles,
   ChevronDown,
   Zap,
+  Lock,
+  Rocket,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { Avatar, IconButton } from "@/components/ui";
-import { notifications } from "@/lib/data";
+import { Avatar, Badge, Button, Card, IconButton } from "@/components/ui";
+import { notifications as seedNotifications } from "@/lib/data";
+import { useApiData } from "@/lib/api-client";
+import { TenantProvider, useTenant } from "@/lib/tenant-context";
+import type { Segment } from "@/lib/data";
 
-const navSections = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  persona: string;
+  segment?: Segment;
+}
+
+const navSections: { label: string; items: NavItem[] }[] = [
   {
     label: "Operations",
     items: [
       { href: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard, persona: "management" },
-      { href: "/inventory", label: "Inventory Heat Map", icon: Grid3x3, persona: "sales" },
+      { href: "/inventory", label: "Inventory Heat Map", icon: Grid3x3, persona: "sales", segment: "apartments" },
+      { href: "/land", label: "Land Portfolio", icon: Map, persona: "sales", segment: "land" },
       { href: "/leads", label: "Lead Pipeline", icon: Users, persona: "sales" },
       { href: "/quotes", label: "Quotations & Approvals", icon: FileText, persona: "sales" },
-      { href: "/construction", label: "Construction & DPR", icon: HardHat, persona: "construction" },
+      { href: "/construction", label: "Construction & DPR", icon: HardHat, persona: "construction", segment: "apartments" },
       { href: "/finance", label: "Finance & Collections", icon: Landmark, persona: "finance" },
       { href: "/portal", label: "Customer Portal", icon: Home, persona: "customer" },
     ],
@@ -40,19 +55,34 @@ const navSections = [
 const personas = [
   { id: "management", label: "Management", role: "VP · Sales & Ops" },
   { id: "sales", label: "Sales", role: "Sales Executive" },
-  { id: "construction", label: "Construction", role: "Site Engineer" },
+  { id: "construction", label: "Construction", role: "Site Engineer", segment: "apartments" as Segment },
   { id: "finance", label: "Finance", role: "Accounts Lead" },
-  { id: "customer", label: "Customer", role: "Unit Owner" },
+  { id: "customer", label: "Customer", role: "Unit / Plot Owner" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <TenantProvider>
+      <ShellInner>{children}</ShellInner>
+    </TenantProvider>
+  );
+}
+
+function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { tenant, plan, tenants, has, setTenantId } = useTenant();
   const [persona, setPersona] = useState("management");
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications] = useApiData("/api/notifications", seedNotifications);
 
   const visibleItems = navSections[0].items.filter(
-    (item) => item.persona === persona || persona === "management",
+    (item) => (item.persona === persona || persona === "management") && (!item.segment || has(item.segment)),
   );
+
+  const currentItem = navSections[0].items.find((i) => pathname === i.href);
+  const locked = Boolean(currentItem?.segment && !has(currentItem.segment));
+
+  const visiblePersonas = personas.filter((p) => !p.segment || has(p.segment));
 
   return (
     <div className="flex min-h-screen">
@@ -70,14 +100,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         <div className="px-3 pt-4">
           <label className="block">
-            <span className="sr-only">Switch persona</span>
+            <span className="mb-1 block px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">Tenant · subscription</span>
+            <div className="relative">
+              <select
+                value={tenant.id}
+                onChange={(e) => setTenantId(e.target.value)}
+                className="w-full cursor-pointer appearance-none rounded-md border border-white/10 bg-white/5 px-3 py-2 pr-8 text-xs text-white outline-none transition-colors hover:bg-white/10 focus:border-white/25"
+              >
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id} className="text-text">
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50" />
+            </div>
+          </label>
+          <div className="mt-1.5 flex items-center gap-2 px-1">
+            <Badge tone={plan.segments.length === 2 ? "primary" : plan.segments[0] === "land" ? "success" : "info"} className="text-[10px]">
+              {plan.code} plan
+            </Badge>
+            <span className="truncate text-[10px] text-white/40">{plan.price}</span>
+          </div>
+        </div>
+
+        <div className="px-3 pt-3">
+          <label className="block">
+            <span className="mb-1 block px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">Persona</span>
             <div className="relative">
               <select
                 value={persona}
                 onChange={(e) => setPersona(e.target.value)}
                 className="w-full cursor-pointer appearance-none rounded-md border border-white/10 bg-white/5 px-3 py-2 pr-8 text-xs text-white outline-none transition-colors hover:bg-white/10 focus:border-white/25"
               >
-                {personas.map((p) => (
+                {visiblePersonas.map((p) => (
                   <option key={p.id} value={p.id} className="text-text">
                     {p.label}
                   </option>
@@ -86,7 +142,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50" />
             </div>
           </label>
-          <p className="mt-1.5 px-1 text-[10px] text-white/40">{personas.find((p) => p.id === persona)?.role}</p>
+          <p className="mt-1.5 px-1 text-[10px] text-white/40">{visiblePersonas.find((p) => p.id === persona)?.role}</p>
         </div>
 
         <nav className="mt-4 flex-1 overflow-y-auto px-3 pb-4">
@@ -120,7 +176,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 rounded-md bg-white/5 p-2">
             <Sparkles size={14} className="text-white/50" />
             <p className="text-[10px] leading-snug text-white/60">
-              AI agents live on this tenant · <span className="text-white/90 font-medium">builder-a.estateflow.in</span>
+              AI agents live on this tenant · <span className="font-medium text-white/90">{tenant.subdomain}</span>
             </p>
           </div>
         </div>
@@ -131,7 +187,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="hidden max-w-md flex-1 items-center rounded-md border border-border bg-surface-muted/60 px-3 py-2 md:flex">
             <Search size={14} className="text-text-subtle" />
             <input
-              placeholder="Search leads, units, invoices…  (⌘K)"
+              placeholder="Search leads, units, land parcels…  (⌘K)"
               className="w-full bg-transparent px-2 text-sm text-text outline-none placeholder:text-text-subtle"
               aria-label="Global search"
             />
@@ -188,11 +244,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main className="flex-1 px-6 py-6">
+          {locked ? (
+            <PlanLocked planName={plan.name} onPreview={() => setTenantId("builder-a")} />
+          ) : (
+            children
+          )}
+        </main>
 
         <footer className="border-t border-border px-6 py-4">
           <div className="flex flex-col gap-1 text-[11px] text-text-subtle sm:flex-row sm:items-center sm:justify-between">
-            <span>EstateFlow · Demo tenant · Data resides in AWS ap-south-1 (DPDP 2023)</span>
+            <span>
+              EstateFlow · {tenant.name} · {plan.name} plan · Data resides in AWS {tenant.region} (DPDP 2023)
+            </span>
             <span className="flex items-center gap-1.5">
               <Zap size={11} /> First token &lt; 1.5s · p95 API &lt; 200ms
             </span>
@@ -200,5 +264,26 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </footer>
       </div>
     </div>
+  );
+}
+
+function PlanLocked({ planName, onPreview }: { planName: string; onPreview: () => void }) {
+  return (
+    <Card className="mx-auto mt-8 flex max-w-xl flex-col items-center p-10 text-center animate-fade-in">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary">
+        <Lock size={24} />
+      </div>
+      <h1 className="mt-4 text-lg font-semibold text-text">Not part of your subscription</h1>
+      <p className="mt-2 max-w-sm text-sm leading-relaxed text-text-muted">
+        This module is not included in the <b className="text-text">{planName}</b> plan. Upgrade to{" "}
+        <b className="text-text">Land + Homes</b> to unlock the complete real estate operating system for this tenant.
+      </p>
+      <Button className="mt-6" onClick={onPreview}>
+        <Rocket size={15} /> Preview Land + Homes plan
+      </Button>
+      <p className="mt-3 text-[11px] text-text-subtle">
+        In production this routes to your billing flow — here it switches to the enterprise demo tenant.
+      </p>
+    </Card>
   );
 }

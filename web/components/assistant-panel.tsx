@@ -4,8 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, User, Send, Check, Copy, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { aiAgentChat } from "@/lib/data";
+import { useApiData, apiSend } from "@/lib/api-client";
 
 export function AssistantPanel() {
+  const [chat, setChat] = useApiData<{ from: "user" | "ai"; text: string }[]>(
+    "/api/ai/chat",
+    aiAgentChat as { from: "user" | "ai"; text: string }[],
+  );
   const [messages, setMessages] = useState<{ from: "user" | "ai"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -16,14 +21,17 @@ export function AssistantPanel() {
     setMessages((m) => [...m, { from: "user", text }]);
     setInput("");
     setThinking(true);
+    apiSend<{ from: "user" | "ai"; text: string }>("/api/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ from: "user", text }),
+    }).catch(() => {});
     setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        {
-          from: "ai",
-          text: "Confirmed. I've synced this with the booking engine and WhatsApp. Would you like me to send a payment-plan PDF as well?",
-        },
-      ]);
+      const reply = {
+        from: "ai" as const,
+        text: "Confirmed. I've synced this with the booking engine and WhatsApp. Would you like me to send a payment-plan PDF as well?",
+      };
+      setMessages((m) => [...m, reply]);
+      setChat((c) => [...c, { from: "user", text }, reply]);
       setThinking(false);
     }, 1200);
   };

@@ -5,11 +5,12 @@ import { Home, CalendarDays, FileText, Camera, Download, ShieldCheck, PhoneCall,
 import { inr } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar, Badge, Button, Card, CardHeader, PageHeader } from "@/components/ui";
-import { milestones } from "@/lib/data";
+import { useApiData } from "@/lib/api-client";
+import { milestones as seedMilestones } from "@/lib/data";
 
-const unit = { no: "T1-03-A", project: "Elevate Residences", type: "3BHK", sqft: 1650, floor: "Level 3 · Tower 1", price: 13400000 };
+const seedUnit = { no: "T1-03-A", project: "Elevate Residences", type: "3BHK", sqft: 1650, floor: "Level 3 · Tower 1", price: 13400000 };
 
-const instalments = [
+const seedInstalments = [
   { id: "i1", name: "Booking amount", due: "2026-08-12", amount: 200000, paid: true, paidOn: "2026-08-06" },
   { id: "i2", name: "15% — Agreement value", due: "2026-09-15", amount: 2010000, paid: false, paidOn: "" },
   { id: "i3", name: "20% — Structure up to L5", due: "2026-12-01", amount: 2680000, paid: false, paidOn: "" },
@@ -17,7 +18,7 @@ const instalments = [
   { id: "i5", name: "Balance — Possession", due: "2028-01-20", amount: 5900000, paid: false, paidOn: "" },
 ];
 
-const docs = [
+const seedDocs = [
   { name: "Agreement for Sale (draft)", tag: "For signing" },
   { name: "Payment schedule & Annexure", tag: "Ready" },
   { name: "RERA registration certificate", tag: "Verified" },
@@ -25,6 +26,13 @@ const docs = [
 ];
 
 export function PortalView() {
+  const [portal] = useApiData("/api/portal", {
+    milestones: seedMilestones,
+    unit: seedUnit,
+    instalments: seedInstalments,
+    docs: seedDocs,
+  });
+  const { milestones, unit, instalments, docs } = portal;
   const [tab, setTab] = useState<"overview" | "payments" | "docs">("overview");
 
   const tabs = [

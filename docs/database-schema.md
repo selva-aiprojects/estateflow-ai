@@ -37,7 +37,8 @@ erDiagram
         varchar subdomain UK
         varchar db_schema UK
         varchar status
-        varchar plan_tier
+        varchar plan_id
+        varchar[] segments
         jsonb branding_json
     }
     tenant_feature_flags {
@@ -146,6 +147,66 @@ erDiagram
 
 **Unit states:** `available`(green) / `blocked`(yellow) / `token_paid`(blue) / `sold`(red) / `under_maintenance`.
 **Locking (TR-INV-004):** Redis holds the lock for 15 min at quote time; `unit_holds` persists an auditable trace. `units.version` + optimistic update is the DB backstop.
+
+### 3.2b Land Portfolio (Land segment)
+
+```mermaid
+erDiagram
+    land_parcels ||--o{ land_parcel_documents : "verified"
+    land_parcels ||--o{ land_title_chain : "ownership"
+    land_parcels ||--o{ plot_layouts : "plotted"
+    plot_layouts ||--o{ plots : "contains"
+    land_status ||--o{ land_parcels : "state"
+    land_zoning ||--o{ land_parcels : "zoned"
+    land_parcels ||--o{ land_holds : "holds"
+    plots ||--o{ land_holds : "holds"
+
+    land_parcels {
+        uuid id PK
+        varchar code UK
+        varchar survey_no
+        numeric total_acres
+        int total_guntas
+        numeric rate_per_acre
+        varchar zoning FK
+        varchar title_status
+        varchar status FK
+        uuid current_booking_id
+        int version
+    }
+    land_parcel_documents {
+        uuid id PK
+        uuid parcel_id FK
+        varchar doc_type
+        varchar verification_status
+    }
+    plot_layouts {
+        uuid id PK
+        uuid parcel_id FK
+        varchar name
+        int total_plots
+    }
+    plots {
+        uuid id PK
+        uuid layout_id FK
+        varchar plot_no
+        varchar zone
+        numeric area_sqft
+        numeric price
+        varchar status FK
+    }
+    land_holds {
+        uuid id PK
+        uuid parcel_id FK
+        uuid plot_id FK
+        timestamptz expires_at
+        timestamptz released_at
+    }
+```
+
+**Parcel states:** `available`(green) / `hold`(yellow) / `token_paid`(blue) / `registered`(purple) / `sold`(red).
+**Title status:** `in_review` / `clear` / `litigation` / `disputed`; diligence is documented via `land_parcel_documents` + `land_title_chain`.
+**Holds:** a quote on a parcel or plot writes a `land_holds` row (exactly one of `parcel_id`/`plot_id` via the `num_nonnulls` check), mirroring `unit_holds`.
 
 ### 3.3 Sales, Quotations & Collections
 
