@@ -3,6 +3,7 @@ const path = require('path');
 const { Client } = require('pg');
 
 const DB_NAME = 'estateflow';
+const CONNECTION_STRING = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING;
 const PGHOST = process.env.PGHOST || '127.0.0.1';
 const PGPORT = Number(process.env.PGPORT || 5432);
 const PGUSER = process.env.PGUSER || 'postgres';
@@ -84,22 +85,7 @@ async function runStatements(client, statements, label) {
   console.log(`[OK] ${label}: ${statements.length} statements applied`);
 }
 
-async function main() {
-  const admin = new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: 'postgres' });
-  await admin.connect();
-  const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [DB_NAME]);
-  if (exists.rowCount === 0) {
-    await admin.query(`CREATE DATABASE ${DB_NAME}`);
-    console.log(`[OK] created database ${DB_NAME}`);
-  } else {
-    console.log(`[OK] database ${DB_NAME} already exists`);
-  }
-  await admin.end();
-
-  const db = new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: DB_NAME });
-  await db.connect();
-  console.log(`[OK] connected to ${DB_NAME}`);
-
+async function applySchema(db) {
   const publicStatements = splitSql(fs.readFileSync(PUBLIC_SQL, 'utf8'));
   await runStatements(db, publicStatements, 'public schema');
 
@@ -119,6 +105,35 @@ async function main() {
       (SELECT count(*) FROM information_schema.tables WHERE table_schema = '${schemaName}') AS tables,
       (SELECT count(*) FROM pg_views WHERE schemaname = '${schemaName}') AS views`);
   console.log(`[OK] ${schemaName}: ${counts.rows[0].tables} tables, ${counts.rows[0].views} views`);
+}
+
+async function main() {
+  if (CONNECTION_STRING) {
+    const db = new Client({ connectionString: CONNECTION_STRING });
+    await db.connect();
+    console.log(`[OK] connected via DATABASE_URL (using existing database)`);
+    await applySchema(db);
+    await db.end();
+    console.log('[DONE] bootstrap complete');
+    return;
+  }
+
+  const admin = new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: 'postgres' });
+  await admin.connect();
+  const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [DB_NAME]);
+  if (exists.rowCount === 0) {
+    await admin.query(`CREATE DATABASE ${DB_NAME}`);
+    console.log(`[OK] created database ${DB_NAME}`);
+  } else {
+    console.log(`[OK] database ${DB_NAME} already exists`);
+  }
+  await admin.end();
+
+  const db = new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: DB_NAME });
+  await db.connect();
+  console.log(`[OK] connected to ${DB_NAME}`);
+
+  await applySchema(db);
   await db.end();
   console.log('[DONE] bootstrap complete');
 }

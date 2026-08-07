@@ -1,34 +1,80 @@
 "use client";
 
 import { useState } from "react";
-import { Home, CalendarDays, FileText, Camera, Download, ShieldCheck, PhoneCall, MapPin, Bell } from "lucide-react";
+import {
+  Home,
+  CalendarDays,
+  FileText,
+  Camera,
+  Download,
+  ShieldCheck,
+  PhoneCall,
+  MapPin,
+  Bell,
+  Building2,
+  CircleParking,
+  Plug,
+  Waves,
+  Dumbbell,
+  Trees,
+  Baby,
+  Footprints,
+  Trophy,
+  BatteryCharging,
+  MoveVertical,
+  Flame,
+  Droplets,
+  Recycle,
+  Headset,
+} from "lucide-react";
 import { inr } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar, Badge, Button, Card, CardHeader, PageHeader } from "@/components/ui";
 import { useApiData } from "@/lib/api-client";
 import { PageSkeleton } from "@/components/loading";
-import type { Milestone } from "@/lib/data";
+import type { Milestone, UnitAmenity, AmenityKind } from "@/lib/data";
 
 interface PortalPayload {
   milestones: Milestone[];
   unit: { no: string; project: string; type: string; sqft: number; floor: string; price: number };
   instalments: { id: string; name: string; due: string; amount: number; paid: boolean; paidOn: string }[];
   docs: { name: string; tag: string }[];
+  amenities: UnitAmenity[];
 }
+
+const amenityIcon: Record<AmenityKind, React.ElementType> = {
+  parking: CircleParking,
+  charging: Plug,
+  clubhouse: Building2,
+  pool: Waves,
+  gym: Dumbbell,
+  garden: Trees,
+  play: Baby,
+  jogging: Footprints,
+  sports: Trophy,
+  security: ShieldCheck,
+  backup: BatteryCharging,
+  lifts: MoveVertical,
+  fire: Flame,
+  water: Droplets,
+  stp: Recycle,
+  concierge: Headset,
+};
 
 export function PortalView() {
   const [portal] = useApiData<PortalPayload>("/api/portal");
-  const [tab, setTab] = useState<"overview" | "payments" | "docs">("overview");
+  const [tab, setTab] = useState<"overview" | "payments" | "docs" | "amenities">("overview");
 
   const tabs = [
     { id: "overview" as const, label: "Overview", icon: Home },
     { id: "payments" as const, label: "Payments", icon: CalendarDays },
     { id: "docs" as const, label: "Documents", icon: FileText },
+    { id: "amenities" as const, label: "Amenities", icon: Building2 },
   ];
 
   if (!portal) return <PageSkeleton />;
 
-  const { milestones, unit, instalments, docs } = portal;
+  const { milestones, unit, instalments, docs, amenities } = portal;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -217,6 +263,36 @@ export function PortalView() {
             ))}
           </div>
         </Card>
+      )}
+
+      {tab === "amenities" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-gradient-to-r from-primary-soft/40 to-surface px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-text">Amenities &amp; Services</p>
+              <p className="text-xs text-text-muted">Everything included with {unit.no} · Elevate Residences</p>
+            </div>
+            <Badge tone="primary">{amenities.length} amenities</Badge>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {amenities.map((a) => {
+              const Icon = amenityIcon[a.kind] ?? Building2;
+              return (
+                <Card key={a.kind} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+                      <Icon size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text">{a.name}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{a.detail ?? "Included with your home"}</p>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

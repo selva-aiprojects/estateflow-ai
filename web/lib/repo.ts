@@ -52,6 +52,9 @@ import {
   type SalesLead,
   type SalesLeadStage,
   type SalesLeadSource,
+  type AmenityKind,
+  type UnitAmenity,
+  unitAmenities,
 } from "@/lib/data";
 
 type DbRow = Record<string, unknown>;
@@ -956,6 +959,7 @@ export interface PortalPayload {
   unit: { no: string; project: string; type: string; sqft: number; floor: string; price: number };
   instalments: { id: string; name: string; due: string; amount: number; paid: boolean; paidOn: string }[];
   docs: { name: string; tag: string }[];
+  amenities: UnitAmenity[];
 }
 
 export async function getPortal(): Promise<PortalPayload> {
@@ -1003,7 +1007,22 @@ export async function getPortal(): Promise<PortalPayload> {
   const docRows = await q<DbRow>(`SELECT id, title, status FROM documents ORDER BY created_at, id`);
   const docs = docRows.map((r) => ({ name: str(r.title), tag: docTag(str(r.title)) }));
 
-  return { milestones, unit, instalments, docs };
+  const amenityRows = await q<DbRow>(`
+    SELECT a.code, a.name
+    FROM unit_amenities ua
+    JOIN amenities a ON a.id = ua.amenity_id
+    JOIN units u ON u.id = ua.unit_id
+    JOIN bookings bk ON bk.unit_id = u.id
+    ORDER BY a.name`);
+  const detailByKind = new Map(unitAmenities.map((a) => [a.kind, a.detail]));
+  const amenities: UnitAmenity[] = amenityRows.length
+    ? amenityRows.map((r) => {
+        const kind = (str(r.code) as AmenityKind) ?? "clubhouse";
+        return { kind, name: str(r.name), detail: detailByKind.get(kind) };
+      })
+    : unitAmenities;
+
+  return { milestones, unit, instalments, docs, amenities };
 }
 
 // ---------------------------------------------------------------------------

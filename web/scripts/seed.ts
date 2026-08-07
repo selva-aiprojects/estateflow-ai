@@ -51,9 +51,11 @@ import {
   rentalSummary,
   tenants,
   PLANS,
+  unitAmenities,
 } from "../lib/data.ts";
 
 const SCHEMA = process.env.TENANT_SCHEMA || "builder_a";
+const CONNECTION_STRING = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? process.env.POSTGRES_URL_NON_POOLING;
 const PGHOST = process.env.PGHOST || "127.0.0.1";
 const PGPORT = Number(process.env.PGPORT || 5432);
 const PGUSER = process.env.PGUSER || "postgres";
@@ -87,7 +89,9 @@ async function val<T>(sql: string, params: unknown[] = []): Promise<T | undefine
 }
 
 async function main() {
-  client = new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: PGDATABASE });
+  client = CONNECTION_STRING
+    ? new Client({ connectionString: CONNECTION_STRING })
+    : new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: PGDATABASE });
   await client.connect();
   await client.query("BEGIN");
 
@@ -113,6 +117,7 @@ async function main() {
     "channel_partners", "channel_deals",
     "ai_agents", "ai_conversations", "ai_messages", "ai_alerts", "ai_workflow_runs",
     "site_visits", "notifications", "app_config",
+    "documents", "cash_flow_forecasts", "unit_amenities",
     "users",
   ];
   for (const t of wipe) {
@@ -446,6 +451,25 @@ async function main() {
     [uuid("doc:portal-4")],
   );
   console.log("[8] portal booking seeded");
+
+  // ---------------------------------------------------------------------------
+  // 8b. AMENITIES (lookup + unit links for the portal unit)
+  // ---------------------------------------------------------------------------
+  if (portalUnitId) {
+    for (const a of unitAmenities) {
+      const amenityId = uuid(`amenity:${a.kind}`);
+      await run(
+        `INSERT INTO ${SCHEMA}.amenities (id, code, name) VALUES ($1, $2, $3)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name`,
+        [amenityId, a.kind, a.name],
+      );
+      await run(
+        `INSERT INTO ${SCHEMA}.unit_amenities (unit_id, amenity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [portalUnitId, amenityId],
+      );
+    }
+    console.log("[8b] amenities seeded");
+  }
 
   // ---------------------------------------------------------------------------
   // 9. CONSTRUCTION: MILESTONES + DPRs

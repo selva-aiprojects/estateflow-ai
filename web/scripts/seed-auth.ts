@@ -12,6 +12,7 @@ import { Client } from "pg";
 import { hashPassword } from "../lib/password.ts";
 
 const SCHEMA = process.env.TENANT_SCHEMA || "builder_a";
+const CONNECTION_STRING = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? process.env.POSTGRES_URL_NON_POOLING;
 const PGHOST = process.env.PGHOST || "127.0.0.1";
 const PGPORT = Number(process.env.PGPORT || 5432);
 const PGUSER = process.env.PGUSER || "postgres";
@@ -19,7 +20,9 @@ const PGPASSWORD = process.env.PGPASSWORD || "postgres";
 const PGDATABASE = process.env.PGDATABASE || "estateflow";
 
 async function main() {
-  const client = new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: PGDATABASE });
+  const client = CONNECTION_STRING
+    ? new Client({ connectionString: CONNECTION_STRING })
+    : new Client({ host: PGHOST, port: PGPORT, user: PGUSER, password: PGPASSWORD, database: PGDATABASE });
   await client.connect();
   await client.query(`SET search_path TO public`);
 

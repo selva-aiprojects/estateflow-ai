@@ -1075,6 +1075,53 @@ export interface SalesLead {
   createdAt: string;
 }
 
+// =============================================================================
+// CUSTOMER PORTAL · AMENITIES
+// =============================================================================
+
+export type AmenityKind =
+  | "parking"
+  | "charging"
+  | "clubhouse"
+  | "pool"
+  | "gym"
+  | "garden"
+  | "play"
+  | "jogging"
+  | "sports"
+  | "security"
+  | "backup"
+  | "lifts"
+  | "fire"
+  | "water"
+  | "stp"
+  | "concierge";
+
+export interface UnitAmenity {
+  kind: AmenityKind;
+  name: string;
+  detail?: string;
+}
+
+export const unitAmenities: UnitAmenity[] = [
+  { kind: "parking", name: "Car Parking", detail: "Lot B-2 · Tower 3 · Level P2" },
+  { kind: "charging", name: "EV Charging Slot", detail: "Slot C-04 · Tower 3 · Level P1" },
+  { kind: "clubhouse", name: "Clubhouse", detail: "Club Wing · Ground floor" },
+  { kind: "pool", name: "Swimming Pool", detail: "Deck 1 · Between Tower 2 & 3" },
+  { kind: "gym", name: "Fully-Equipped Gym", detail: "Club Wing · Ground floor" },
+  { kind: "garden", name: "Landscaped Gardens", detail: "Central courtyard" },
+  { kind: "play", name: "Children's Play Area", detail: "Courtyard · North wing" },
+  { kind: "jogging", name: "Jogging Track", detail: "1.2 km · Perimeter ring" },
+  { kind: "sports", name: "Indoor Sports Courts", detail: "Club Wing · Level 1" },
+  { kind: "security", name: "24×7 Security & CCTV", detail: "Biometric + concierge at all gates" },
+  { kind: "backup", name: "Power Backup (DG)", detail: "100% common areas · 10kVA per unit" },
+  { kind: "lifts", name: "High-Speed Lifts", detail: "3 lifts per tower · 2.5 m/s" },
+  { kind: "fire", name: "Fire Safety Systems", detail: "Sprinklers + NOC (Karnataka Fire & Emergency)" },
+  { kind: "water", name: "Rainwater Harvesting", detail: "3 recharge wells" },
+  { kind: "stp", name: "Water Treatment (STP)", detail: "120 kLD · Recycled for landscape" },
+  { kind: "concierge", name: "Concierge Desk", detail: "Lobby · Tower 1" },
+];
+
 export const salesLeads: SalesLead[] = [
   { id: "SL-1188", name: "Rohan Mehta", phone: "+91 98450 11223", source: "facebook", project: "Elevate Residences", unitType: "3BHK", budget: 14000000, score: 92, stage: "offer", assigned: "Arjun Nair", segment: "apartments", createdAt: "2026-08-05T09:12:00" },
   { id: "SL-1187", name: "Priya Sharma", phone: "+91 98110 44556", source: "google_ads", project: "Elevate Residences", unitType: "2BHK", budget: 9800000, score: 84, stage: "visit_scheduled", assigned: "Neha Gupta", segment: "apartments", createdAt: "2026-08-05T08:40:00" },
