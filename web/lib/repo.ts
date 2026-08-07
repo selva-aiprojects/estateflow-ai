@@ -42,6 +42,7 @@ import {
   type RentInvoice,
   type MarketplacePartner,
   type MarketplaceDeal,
+  type PartnerCategory,
   type ChannelPartner,
   type CpDeal,
   type PartnerTier,
@@ -2070,21 +2071,38 @@ export interface MarketplacePayload {
   deals: MarketplaceDeal[];
 }
 
+const categoryKeys = new Set<PartnerCategory>(["home_loan", "interiors", "legal", "packers", "insurance", "furnishing"]);
+const partnerTypeCategory: Record<string, PartnerCategory> = {
+  bank_home_loan: "home_loan",
+  interior_designer: "interiors",
+  packers_movers: "packers",
+  insurance: "insurance",
+  other: "legal",
+};
+
+function resolveCategory(candidate: string, partnerType: string): PartnerCategory {
+  if (categoryKeys.has(candidate as PartnerCategory)) return candidate as PartnerCategory;
+  return partnerTypeCategory[partnerType] ?? "home_loan";
+}
+
 export async function getMarketplace(): Promise<MarketplacePayload> {
   const [partners, deals] = await Promise.all([
     (async () => {
       const rows = await q<DbRow>(`
         SELECT p.id, p.name, p.status, p.verified_at, p.city, p.rating, p.deals, p.conversion,
+               p.partner_type AS ptype,
                ps.service_name AS category
         FROM marketplace_partners p
         LEFT JOIN LATERAL (
-          SELECT service_name FROM partner_services WHERE partner_id = p.id LIMIT 1
+          SELECT service_name FROM partner_services WHERE partner_id = p.id
+          ORDER BY (service_name IN ('home_loan','interiors','legal','packers','insurance','furnishing')) DESC, created_at, id
+          LIMIT 1
         ) ps ON true
         ORDER BY p.rating DESC`);
       return rows.map((r) => ({
         id: str(r.id),
         name: str(r.name),
-        category: (str(r.category) || "home_loan") as MarketplacePartner["category"],
+        category: resolveCategory(str(r.category), str(r.ptype)),
         city: str(r.city),
         rating: num(r.rating),
         deals: num(r.deals),
@@ -2095,7 +2113,7 @@ export async function getMarketplace(): Promise<MarketplacePayload> {
     (async () => {
       const rows = await q<DbRow>(`
         SELECT r.id, r.revenue, r.ai_score, r.commission_amount, r.status, r.created_at,
-               c.name AS customer, p.name AS partner, ps.service_name AS category
+               c.name AS customer, p.name AS partner, p.partner_type AS ptype, ps.service_name AS category
         FROM lead_referrals r
         JOIN marketplace_partners p ON p.id = r.partner_id
         LEFT JOIN customers c ON c.id = r.customer_id
@@ -2105,7 +2123,7 @@ export async function getMarketplace(): Promise<MarketplacePayload> {
         id: str(r.id),
         customer: str(r.customer),
         partner: str(r.partner),
-        category: (str(r.category) || "home_loan") as MarketplaceDeal["category"],
+        category: resolveCategory(str(r.category), str(r.ptype)),
         commission: num(r.commission_amount),
         revenue: num(r.revenue),
         stage: (str(r.status) || "matched") as MarketplaceDeal["stage"],

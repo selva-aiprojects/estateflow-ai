@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -126,6 +126,10 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const [persona, setPersona] = useState("management");
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications] = useApiData<{ id: string; title: string; body: string; time: string; tone: string }[]>("/api/notifications");
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
 
   const allItems = navGroups.flatMap((g) => g.items);
   const visibleItems = allItems.filter((item) => item.persona === persona || persona === "management");

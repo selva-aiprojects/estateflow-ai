@@ -929,6 +929,10 @@ async function main() {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [id, partnerTypeMap[p.category], p.name, p.verified ? "verified" : "pending", p.verified ? "2026-01-15" : null, p.city, p.rating, p.deals, p.conversion],
     );
+    await run(
+      `INSERT INTO ${SCHEMA}.partner_services (id, partner_id, service_name, commission_pct) VALUES ($1, $2, $3, 2.0)`,
+      [uuid(`pservice:${p.id}`), id, p.category],
+    );
   }
   const loanServiceMap: Record<string, string[]> = {
     "Axis Bank — Home Loans": ["Home loan up to 85%", "Pre-approved for RERA projects", "Flexi overdraft facility"],
@@ -937,9 +941,7 @@ async function main() {
   for (const [partnerName, services] of Object.entries(loanServiceMap)) {
     const pid = partnerIdByName.get(partnerName);
     if (!pid) continue;
-    const firstServiceId = uuid(`pservice:${marketplacePartners.find((x) => x.name === partnerName)!.id}`);
-    await run(`UPDATE ${SCHEMA}.partner_services SET service_name = $1 WHERE id = $2`, [services[0], firstServiceId]);
-    for (const [i, s] of services.slice(1).entries()) {
+    for (const [i, s] of services.entries()) {
       await run(
         `INSERT INTO ${SCHEMA}.partner_services (id, partner_id, service_name, commission_pct) VALUES ($1, $2, $3, 2.0)`,
         [uuid(`pservice:${partnerName}-${i}`), pid, s],
