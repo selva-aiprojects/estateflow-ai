@@ -915,6 +915,7 @@ export const partnerCategoryMeta: Record<PartnerCategory, { label: string; tone:
 
 export const marketplacePartners: MarketplacePartner[] = [
   { id: "mp1", name: "Axis Bank — Home Loans", category: "home_loan", city: "Bengaluru", rating: 4.5, deals: 12, conversion: 71, verified: true },
+  { id: "mp6", name: "HDFC — Prime Home Loan", category: "home_loan", city: "Bengaluru", rating: 4.4, deals: 18, conversion: 76, verified: true },
   { id: "mp2", name: "Livspace Studio", category: "interiors", city: "Bengaluru", rating: 4.2, deals: 9, conversion: 58, verified: true },
   { id: "mp3", name: "LegitDocs Legal", category: "legal", city: "Bengaluru", rating: 4.7, deals: 14, conversion: 82, verified: true },
   { id: "mp4", name: "DBS Insurance Brokers", category: "insurance", city: "Bengaluru", rating: 4.0, deals: 6, conversion: 44, verified: true },
@@ -1209,6 +1210,123 @@ export const portalReferralProgram: PortalReferralProgram = {
     { id: "ref3", name: "Sneha Kulkarni", phone: "+91 90080 66778", status: "converted", reward: 50000 },
   ],
 };
+
+export interface PortalPhoto {
+  id: string;
+  mediaType: "photo" | "video";
+  url: string;
+  thumb?: string;
+  caption: string;
+  shotOn: string;
+}
+
+export const portalPhotos: PortalPhoto[] = [
+  { id: "ph1", mediaType: "photo", url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=900&q=70", caption: "Level 5 slab shutter work", shotOn: "2026-08-05" },
+  { id: "ph2", mediaType: "photo", url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=900&q=70", caption: "East wing — steel fixing for slab", shotOn: "2026-08-04" },
+  { id: "ph3", mediaType: "photo", url: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=900&q=70", caption: "T1 tower view from east approach", shotOn: "2026-08-03" },
+  { id: "ph4", mediaType: "video", url: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4", caption: "Drone walkthrough — Level 4 slab cast", shotOn: "2026-08-03" },
+];
+
+export interface PortalEvent {
+  id: string;
+  title: string;
+  type: "homeowner_meet" | "site_walkthrough" | "webinar" | "festival" | "community";
+  description: string;
+  startsAt: string;
+  location: string;
+  capacity: number;
+  rsvp?: "going" | "interested" | "declined";
+}
+
+export const portalEvents: PortalEvent[] = [
+  { id: "ev1", title: "Homeowner Meet — Elevate Residences", type: "homeowner_meet", description: "Meet the project team, review construction progress and discuss the year ahead for your community.", startsAt: "2026-09-13T11:00:00", location: "Sales Gallery, Elevate Residences", capacity: 120 },
+  { id: "ev2", title: "Site Walkthrough — T1 Tower", type: "site_walkthrough", description: "Guided walkthrough of your tower with the construction team. Safety gear provided.", startsAt: "2026-09-20T10:00:00", location: "Gate 2, Elevate Residences", capacity: 40 },
+];
+
+export interface PortalLoanPartner {
+  id: string;
+  name: string;
+  category: string;
+  city: string;
+  rating: number;
+  deals: number;
+  conversion: number;
+  verified: boolean;
+  services: string[];
+}
+
+export const portalLoanPartners: PortalLoanPartner[] = [
+  { id: "loan1", name: "Axis Bank — Home Loans", category: "home_loan", city: "Bengaluru", rating: 4.5, deals: 12, conversion: 71, verified: true, services: ["Home loan up to 85%", "Pre-approved for RERA projects", "Flexi overdraft facility"] },
+  { id: "loan2", name: "HDFC — Prime Home Loan", category: "home_loan", city: "Bengaluru", rating: 4.4, deals: 18, conversion: 76, verified: true, services: ["0% processing fee for this project", "Balance transfer offers", "Part-payment without penalty"] },
+];
+
+export interface PortalWarrantyDoc {
+  id: string;
+  title: string;
+  status: "draft" | "signed" | "executed" | "cancelled";
+  issued: string;
+}
+
+export const portalWarrantyDocs: PortalWarrantyDoc[] = [
+  { id: "wd1", title: "5-year structural warranty policy", status: "executed", issued: "31 Jul 2026" },
+  { id: "wd2", title: "2-year fittings & finishes warranty", status: "signed", issued: "31 Jul 2026" },
+  { id: "wd3", title: "Handover & possession letter (draft)", status: "draft", issued: "—" },
+];
+
+export interface PortalResaleListing {
+  id: string;
+  listingType: "sale" | "rent";
+  title: string;
+  description: string;
+  price: number;
+  status: "draft" | "active" | "sold" | "closed" | "rented";
+}
+
+export const portalResaleListings: PortalResaleListing[] = [
+  { id: "rl1", listingType: "sale", title: "3BHK T1-03-A — Elevate Residences", description: "Corner unit, 1650 sqft, east-facing. Ready for possession 2028.", price: 16200000, status: "active" },
+];
+
+export interface PortalLoyalty {
+  points: number;
+  tier: "member" | "silver" | "gold" | "platinum";
+  perks: string[];
+}
+
+export const portalLoyalty: PortalLoyalty = {
+  points: 1250,
+  tier: "silver",
+  perks: ["Priority service desk", "Referral bonus boost (₹75,000)", "Invites to member-only events"],
+};
+
+export interface PortalKyc {
+  status: "pending" | "verified" | "rejected" | "not_applicable";
+  pan: string;
+  aadhaarLast4: string;
+}
+
+export const portalKyc: PortalKyc = { status: "pending", pan: "", aadhaarLast4: "" };
+
+export interface PortalTaxSummary {
+  baseAmount: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  tds: number;
+  total: number;
+}
+
+export const portalTaxSummary: PortalTaxSummary = { baseAmount: 200000, cgst: 18000, sgst: 18000, igst: 0, tds: 0, total: 236000 };
+
+export interface PortalChatMessage {
+  from: "user" | "ai";
+  text: string;
+}
+
+export const portalChatMessages: PortalChatMessage[] = [
+  { from: "ai", text: "Hi Rohan! I'm Evie, your EstateFlow assistant. Ask me about your payments, construction progress, amenities or anything else." },
+  { from: "user", text: "When is my next payment due?" },
+  { from: "ai", text: "Your next installment of ₹20,10,000 (15% agreement value) is due on 15 Sep 2026. You're 100% on track — nothing overdue." },
+];
 
 export const salesLeads: SalesLead[] = [
   { id: "SL-1188", name: "Rohan Mehta", phone: "+91 98450 11223", source: "facebook", project: "Elevate Residences", unitType: "3BHK", budget: 14000000, score: 92, stage: "offer", assigned: "Arjun Nair", segment: "apartments", createdAt: "2026-08-05T09:12:00" },

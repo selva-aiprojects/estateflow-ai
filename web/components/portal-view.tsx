@@ -38,6 +38,17 @@ import {
   CalendarClock,
   Clock,
   ClipboardCheck,
+  Play,
+  PartyPopper,
+  Sparkles,
+  MessagesSquare,
+  Calculator,
+  TrendingUp,
+  Languages,
+  Send,
+  Tag,
+  Star,
+  Loader2,
 } from "lucide-react";
 import { inr } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -55,7 +66,7 @@ import {
   Spinner,
   type Tone,
 } from "@/components/ui";
-import { useApiData, apiSend } from "@/lib/api-client";
+import { useApiData, apiGet, apiSend } from "@/lib/api-client";
 import { PageSkeleton } from "@/components/loading";
 import type {
   Milestone,
@@ -67,6 +78,15 @@ import type {
   PortalSnag,
   PortalReferralProgram,
   PortalReferral,
+  PortalPhoto,
+  PortalEvent,
+  PortalLoanPartner,
+  PortalWarrantyDoc,
+  PortalResaleListing,
+  PortalLoyalty,
+  PortalKyc,
+  PortalTaxSummary,
+  PortalChatMessage,
 } from "@/lib/data";
 
 type Instalment = { id: string; name: string; due: string; amount: number; paid: boolean; paidOn: string };
@@ -81,8 +101,17 @@ interface PortalPayload {
   ledger: { total: number; paid: number; due: number; paidPct: number; receipts: Receipt[] };
   updates: PortalUpdate[];
   tickets: PortalTicket[];
-  possession: { steps: PortalPossessionStep[]; snags: PortalSnag[]; possessionDate: string };
+  possession: { steps: PortalPossessionStep[]; snags: PortalSnag[]; possessionDate: string; signed: string[] };
   referrals: PortalReferralProgram;
+  photos: PortalPhoto[];
+  tax: PortalTaxSummary;
+  loanPartners: PortalLoanPartner[];
+  events: PortalEvent[];
+  warranty: PortalWarrantyDoc[];
+  loyalty: PortalLoyalty;
+  kyc: PortalKyc;
+  listings: PortalResaleListing[];
+  chat: PortalChatMessage[];
 }
 
 const amenityIcon: Record<AmenityKind, React.ElementType> = {
@@ -110,6 +139,16 @@ const statusLabel: Record<PortalTicket["status"], string> = { open: "Open", assi
 const snagTone: Record<PortalSnag["status"], Tone> = { open: "warning", in_progress: "info", resolved: "success" };
 const refTone: Record<PortalReferral["status"], Tone> = { visited: "info", booked: "primary", converted: "success" };
 const refLabel: Record<PortalReferral["status"], string> = { visited: "Site visit", booked: "Booked", converted: "Converted" };
+const eventTone: Record<PortalEvent["type"], Tone> = { homeowner_meet: "primary", site_walkthrough: "info", webinar: "success", festival: "warning", community: "muted" };
+const tierTone: Record<PortalLoyalty["tier"], Tone> = { member: "muted", silver: "info", gold: "warning", platinum: "primary" };
+const warrantyTone: Record<PortalWarrantyDoc["status"], Tone> = { draft: "warning", signed: "info", executed: "success", cancelled: "muted" };
+
+const LANGUAGES = [
+  { code: "en", label: "English", greeting: "Welcome back" },
+  { code: "hi", label: "हिन्दी", greeting: "आपका स्वागत है" },
+  { code: "kn", label: "ಕನ್ನಡ", greeting: "ಮರಳಿ ಸ್ವಾಗತ" },
+  { code: "ta", label: "தமிழ்", greeting: "மீண்டும் வரவேற்கிறோம்" },
+];
 
 const CATEGORIES = ["Plumbing", "Electrical", "Snagging", "Appliances", "Interiors", "Other"];
 const PRIORITIES = ["low", "medium", "high", "urgent"];
@@ -205,8 +244,8 @@ function receiptBodyHtml(r: Receipt, unit: PortalPayload["unit"]): string {
 }
 
 export function PortalView() {
-  const [portal] = useApiData<PortalPayload>("/api/portal");
-  const [tab, setTab] = useState<"overview" | "payments" | "docs" | "amenities" | "support" | "possession" | "referrals">("overview");
+  const [portal, setPortal] = useApiData<PortalPayload>("/api/portal");
+  const [tab, setTab] = useState<"overview" | "payments" | "docs" | "amenities" | "support" | "possession" | "referrals" | "site" | "loans" | "events">("overview");
   const [demand, setDemand] = useState<Instalment | null>(null);
   const [demandPaid, setDemandPaid] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -217,23 +256,67 @@ export function PortalView() {
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [gateway, setGateway] = useState<Instalment | null>(null);
+  const [gatewayMode, setGatewayMode] = useState<"upi" | "card">("upi");
+  const [paying, setPaying] = useState(false);
+  const [payResult, setPayResult] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState<PortalChatMessage[] | undefined>();
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [lang, setLang] = useState("en");
+  const [kycForm, setKycForm] = useState({ pan: "", aadhaarLast4: "" });
+  const [kycBusy, setKycBusy] = useState(false);
+  const [thread, setThread] = useState<{ id: string; no: string; subject: string; status: string; priority: string; openedAt: string; comments: { body: string; createdAt: string; isInternal: boolean }[] } | null>(null);
+  const [commentInput, setCommentInput] = useState("");
+  const [threadBusy, setThreadBusy] = useState(false);
+  const [listingForm, setListingForm] = useState({ listingType: "sale", title: "", description: "", price: "" });
+  const [listingBusy, setListingBusy] = useState(false);
+  const [listingMsg, setListingMsg] = useState("");
+  const [emi, setEmi] = useState({ amount: 12000000, rate: 8.5, years: 20 });
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  const [signing, setSigning] = useState("");
+  const [photoIdx, setPhotoIdx] = useState<number | null>(null);
 
   const tabs = [
     { id: "overview" as const, label: "Overview", icon: Home },
     { id: "payments" as const, label: "Payments", icon: CalendarDays },
+    { id: "site" as const, label: "Site Updates", icon: Camera },
     { id: "docs" as const, label: "Documents", icon: FileText },
     { id: "amenities" as const, label: "Amenities", icon: Building2 },
+    { id: "loans" as const, label: "Home Loans", icon: TrendingUp },
+    { id: "events" as const, label: "Events", icon: PartyPopper },
     { id: "support" as const, label: "Support", icon: Headset },
     { id: "possession" as const, label: "Possession", icon: KeyRound },
-    { id: "referrals" as const, label: "Referrals", icon: Gift },
+    { id: "referrals" as const, label: "Rewards", icon: Gift },
   ];
 
   if (!portal) return <PageSkeleton />;
 
-  const { milestones, unit, instalments, docs, amenities, ledger, updates, possession, referrals } = portal;
+  const {
+    milestones, unit, instalments, docs, amenities, ledger, updates, possession, referrals,
+    photos, tax, loanPartners, events, warranty, loyalty, kyc, listings, chat,
+  } = portal;
   const nextDue = instalments.find((x) => !x.paid) ?? instalments[instalments.length - 1];
   const ticketList = tickets ?? portal.tickets;
   const doneSteps = possession.steps.filter((s) => s.status === "done").length;
+  const chatThread = chatMsgs ?? chat;
+  const langMeta = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0];
+
+  const refreshPortal = async () => {
+    try {
+      setPortal(await apiGet<PortalPayload>("/api/portal"));
+    } catch {
+      /* keep current state */
+    }
+  };
+
+  const emiMonthly = (() => {
+    const p = emi.amount;
+    const r = emi.rate / 12 / 100;
+    const n = emi.years * 12;
+    return p * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  })();
 
   const copyCode = async () => {
     try {
@@ -291,17 +374,167 @@ export function PortalView() {
     }
   };
 
+  const openThread = async (id: string) => {
+    setThreadBusy(true);
+    try {
+      const t = await apiGet<{ id: string; no: string; subject: string; status: string; priority: string; openedAt: string; comments: { body: string; createdAt: string; isInternal: boolean }[] }>(`/api/portal/tickets/${id}`);
+      setThread(t);
+    } catch {
+      setThread(null);
+    } finally {
+      setThreadBusy(false);
+    }
+  };
+
+  const sendComment = async () => {
+    if (!thread || !commentInput.trim()) return;
+    setThreadBusy(true);
+    try {
+      await apiSend(`/api/portal/tickets/${thread.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: commentInput }),
+      });
+      setCommentInput("");
+      await openThread(thread.id);
+    } finally {
+      setThreadBusy(false);
+    }
+  };
+
+  const escalate = async () => {
+    if (!thread) return;
+    setThreadBusy(true);
+    try {
+      await apiSend(`/api/portal/tickets/${thread.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "escalate" }),
+      });
+      await openThread(thread.id);
+    } finally {
+      setThreadBusy(false);
+    }
+  };
+
+  const submitKyc = async () => {
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(kycForm.pan.toUpperCase()) || !/^\d{4}$/.test(kycForm.aadhaarLast4)) return;
+    setKycBusy(true);
+    try {
+      await apiSend("/api/portal/kyc", {
+        method: "POST",
+        body: JSON.stringify({ pan: kycForm.pan, aadhaarLast4: kycForm.aadhaarLast4 }),
+      });
+      setKycForm({ pan: "", aadhaarLast4: "" });
+      await refreshPortal();
+    } finally {
+      setKycBusy(false);
+    }
+  };
+
+  const payNow = async () => {
+    if (!gateway) return;
+    setPaying(true);
+    setPayResult(null);
+    try {
+      const res = await apiSend<{ ok: boolean; message: string }>("/api/portal/pay", {
+        method: "POST",
+        body: JSON.stringify({ lineId: gateway.id, amount: gateway.amount }),
+      });
+      setPayResult(res.message);
+      await refreshPortal();
+    } catch {
+      setPayResult("Payment could not be processed. Please try again.");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const sendChat = async () => {
+    const text = chatInput.trim();
+    if (!text) return;
+    setChatMsgs((prev) => [...(prev ?? chat), { from: "user", text }]);
+    setChatInput("");
+    setChatBusy(true);
+    try {
+      const msgs = await apiSend<PortalChatMessage[]>("/api/portal/chat", {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      });
+      setChatMsgs((prev) => [...(prev ?? chat), msgs[1]]);
+    } catch {
+      setChatMsgs((prev) => [...(prev ?? chat), { from: "ai", text: "Sorry, I couldn't reach the assistant right now. Please try again." }]);
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
+  const publishListing = async () => {
+    if (!listingForm.title.trim() || !(Number(listingForm.price) > 0)) {
+      setListingMsg("Title and a positive price are required.");
+      return;
+    }
+    setListingBusy(true);
+    setListingMsg("");
+    try {
+      const res = await apiSend<{ ok: boolean; message: string }>("/api/portal/listings", {
+        method: "POST",
+        body: JSON.stringify({
+          listingType: listingForm.listingType,
+          title: listingForm.title,
+          description: listingForm.description,
+          price: Number(listingForm.price),
+        }),
+      });
+      setListingMsg(res.message);
+      setListingForm({ listingType: "sale", title: "", description: "", price: "" });
+      await refreshPortal();
+    } finally {
+      setListingBusy(false);
+    }
+  };
+
+  const signStep = async (name: string) => {
+    setSigning(name);
+    try {
+      await apiSend("/api/portal/possession", {
+        method: "POST",
+        body: JSON.stringify({ step: name }),
+      });
+      await refreshPortal();
+    } finally {
+      setSigning("");
+    }
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-gradient-to-r from-primary-soft/40 to-surface p-4">
         <div className="flex items-center gap-3">
           <Avatar name="Rohan Mehta" size="lg" />
           <div>
-            <p className="text-sm font-semibold text-text">Welcome back, Rohan</p>
+            <p className="text-sm font-semibold text-text">{langMeta.greeting}, Rohan</p>
             <p className="text-xs text-text-muted">Owner · {unit.no} · {unit.project}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text">
+            <Star size={13} className="text-warning" /> {loyalty.points} pts · {loyalty.tier}
+          </span>
+          <Badge tone={kyc.status === "verified" ? "success" : "warning"}>
+            {kyc.status === "verified" ? "KYC done" : "KYC pending"}
+          </Badge>
+          <label className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text">
+            <Languages size={13} className="text-text-muted" />
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value)}
+              aria-label="Language"
+              className="cursor-pointer bg-transparent text-xs font-medium text-text outline-none"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.label}</option>
+              ))}
+            </select>
+          </label>
           <Button variant="secondary" size="sm" onClick={() => setTab("support")}>
             <PhoneCall size={14} /> Talk to support
           </Button>
@@ -327,7 +560,7 @@ export function PortalView() {
                   ))}
                 </div>
                 <button
-                  onClick={() => { setShowNotifs(false); setTab("overview"); }}
+                  onClick={() => { setShowNotifs(false); setTab("site"); }}
                   className="block w-full border-t border-border px-4 py-2.5 text-left text-xs font-medium text-primary transition-colors duration-200 hover:bg-surface-muted cursor-pointer"
                 >
                   View all updates →
@@ -408,10 +641,25 @@ export function PortalView() {
                 <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
                   <Camera size={13} /> Latest site photo
                 </p>
-                <div className="mt-2 flex aspect-video items-center justify-center rounded-lg bg-surface-muted text-text-subtle">
-                  <Home size={26} />
-                </div>
-                <p className="mt-2 text-[11px] text-text-subtle">Level 5 slab casting · Tower 1 · 05 Aug</p>
+                {photos.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setTab("site")}
+                    className="mt-2 block w-full cursor-pointer text-left"
+                  >
+                    <img
+                      src={photos[0].url}
+                      alt={photos[0].caption}
+                      loading="lazy"
+                      className="aspect-video w-full rounded-lg border border-border object-cover transition-opacity duration-200 hover:opacity-90"
+                    />
+                    <p className="mt-2 text-[11px] text-text-subtle">{photos[0].caption} · {fmtDate(photos[0].shotOn)}</p>
+                  </button>
+                ) : (
+                  <div className="mt-2 flex aspect-video items-center justify-center rounded-lg bg-surface-muted text-text-subtle">
+                    <Home size={26} />
+                  </div>
+                )}
               </Card>
             </div>
           </div>
@@ -420,7 +668,7 @@ export function PortalView() {
             <CardHeader
               title="Next Payment Due"
               subtitle={nextDue.name}
-              action={<Button size="sm" onClick={() => setDemand(nextDue)}>Pay now</Button>}
+              action={<Button size="sm" onClick={() => setGateway(nextDue)}>Pay online</Button>}
             />
             <div className="flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -459,6 +707,64 @@ export function PortalView() {
         </>
       )}
 
+      {tab === "site" && (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-gradient-to-r from-primary-soft/40 to-surface px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white">
+                <Camera size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text">Construction Gallery</p>
+                <p className="text-xs text-text-muted">Fresh from site · synced from daily progress reports</p>
+              </div>
+            </div>
+            <Badge tone="primary">{photos.length} media items</Badge>
+          </div>
+          {photos.length === 0 ? (
+            <EmptyState icon={<Camera size={22} />} title="No photos yet" hint="Photos from the site will appear here as they are uploaded." />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {photos.map((p, i) => (
+                <div key={p.id} className="overflow-hidden rounded-lg border border-border bg-surface">
+                  {p.mediaType === "video" ? (
+                    <video
+                      src={p.url}
+                      className="aspect-video w-full bg-surface-muted object-cover"
+                      controls
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoIdx(i)}
+                      className="group relative block w-full cursor-pointer"
+                    >
+                      <img
+                        src={p.url}
+                        alt={p.caption}
+                        loading="lazy"
+                        className="aspect-video w-full bg-surface-muted object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                      <div className="absolute bottom-3 right-3 rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-text opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                        View larger
+                      </div>
+                    </button>
+                  )}
+                  <div className="flex items-center justify-between gap-2 p-3">
+                    <p className="text-xs font-medium text-text">{p.caption}</p>
+                    <p className="shrink-0 text-[11px] text-text-subtle tabular-nums">{fmtDate(p.shotOn)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "payments" && (
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -480,6 +786,57 @@ export function PortalView() {
               <p className="mt-1 text-[11px] text-text-subtle">Next: {nextDue.name}</p>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader
+              title="Tax Statement"
+              subtitle="GST / TDS breakup across your invoices"
+              action={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    printHtml(
+                      "GST Statement · INV-2026-101",
+                      `<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f766e;padding-bottom:16px;margin-bottom:28px;">
+                         <div><div class="brand">EstateFlow Developers LLP</div><div class="muted">Elevate Residences · Sarjapur Road, Bengaluru</div></div>
+                         <div class="muted" style="text-align:right;">GSTIN: 29ABCDE1234F1Z5<br/>RERA No. PRM/KA/RERA/1251/446/PR/2026</div>
+                       </div>
+                       <div class="muted">Tax statement · INV-2026-101 · Rohan Mehta · ${unit.no}</div>
+                       <h2 style="font-size:18px;margin:6px 0 24px;">GST / TDS summary</h2>
+                       <table>
+                         <tbody>
+                           <tr><td class="muted">Taxable base amount</td><td class="amt" style="text-align:right;font-weight:600;">₹${Number(tax.baseAmount).toLocaleString("en-IN")}</td></tr>
+                           <tr><td class="muted">CGST (9%)</td><td class="amt" style="text-align:right;">₹${Number(tax.cgst).toLocaleString("en-IN")}</td></tr>
+                           <tr><td class="muted">SGST (9%)</td><td class="amt" style="text-align:right;">₹${Number(tax.sgst).toLocaleString("en-IN")}</td></tr>
+                           <tr><td class="muted">IGST</td><td class="amt" style="text-align:right;">₹${Number(tax.igst).toLocaleString("en-IN")}</td></tr>
+                           <tr><td class="muted">TDS deducted (on sale value)</td><td class="amt" style="text-align:right;">₹${Number(tax.tds).toLocaleString("en-IN")}</td></tr>
+                           <tr><td class="muted">Total invoice value</td><td class="amt" style="text-align:right;font-weight:700;">₹${Number(tax.total).toLocaleString("en-IN")}</td></tr>
+                         </tbody>
+                       </table>
+                       <p class="muted" style="margin-top:24px;">This statement reflects the tax components declared in your invoices issued against booking BK-2026-001.</p>`,
+                    )
+                  }
+                >
+                  <Download size={13} /> GST statement
+                </Button>
+              }
+            />
+            <div className="grid grid-cols-2 gap-3 px-5 pb-5 sm:grid-cols-5">
+              {[
+                ["Taxable base", tax.baseAmount],
+                ["CGST 9%", tax.cgst],
+                ["SGST 9%", tax.sgst],
+                ["IGST", tax.igst],
+                ["TDS", tax.tds],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="rounded-md bg-surface-muted/60 p-3">
+                  <p className="text-[11px] text-text-muted">{k}</p>
+                  <p className="mt-1 text-sm font-semibold text-text tabular-nums">{inr(Number(v), 0)}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
 
           <Card>
             <CardHeader title="Statement of Account" subtitle={`Receipts against your booking · ${unit.no}`} />
@@ -548,12 +905,12 @@ export function PortalView() {
                       <td className="px-4 py-3">
                         {!i.paid && (
                           <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => setDemand(i)}>
+                            <Button variant="ghost" size="sm" onClick={() => { setDemandPaid(false); setDemand(i); }}>
                               <Download size={13} /> Demand letter
                             </Button>
                             {i.id === nextDue.id && (
-                              <Button size="sm" onClick={() => setDemand(i)}>
-                                <Banknote size={13} /> Pay now
+                              <Button size="sm" onClick={() => setGateway(i)}>
+                                <Banknote size={13} /> Pay online
                               </Button>
                             )}
                           </div>
@@ -622,6 +979,228 @@ export function PortalView() {
         </div>
       )}
 
+      {tab === "loans" && (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-gradient-to-r from-primary-soft/40 to-surface px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white">
+                <TrendingUp size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text">Home Loan &amp; Services</p>
+                <p className="text-xs text-text-muted">Verified partners · pre-approved for this project</p>
+              </div>
+            </div>
+            <Badge tone="primary">{loanPartners.length} partners</Badge>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="space-y-5 lg:col-span-2">
+              <Card>
+                <CardHeader title="EMI Calculator" subtitle="Estimate your monthly payment for this home" />
+                <div className="grid grid-cols-1 gap-4 px-5 pb-4 sm:grid-cols-3">
+                  <Input
+                    label="Loan amount (₹)"
+                    value={String(emi.amount)}
+                    onChange={(v) => setEmi((e) => ({ ...e, amount: Number(v) || 0 }))}
+                    placeholder="12000000"
+                  />
+                  <Input
+                    label="Rate (% p.a.)"
+                    value={String(emi.rate)}
+                    onChange={(v) => setEmi((e) => ({ ...e, rate: Number(v) || 0 }))}
+                    placeholder="8.5"
+                  />
+                  <Input
+                    label="Tenure (years)"
+                    value={String(emi.years)}
+                    onChange={(v) => setEmi((e) => ({ ...e, years: Number(v) || 0 }))}
+                    placeholder="20"
+                  />
+                </div>
+                <div className="mx-5 mb-5 flex flex-col gap-3 rounded-md border border-primary/20 bg-primary-soft/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[11px] text-text-muted">Estimated monthly EMI</p>
+                    <p className="text-2xl font-semibold text-primary tabular-nums">
+                      {Number.isFinite(emiMonthly) ? inr(Math.round(emiMonthly), 0) : "—"}
+                    </p>
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    For a {inr(emi.amount, 0)} loan at {emi.rate}% for {emi.years} yrs
+                  </p>
+                </div>
+              </Card>
+
+              <Card>
+                <CardHeader title="Home Loan Partners" subtitle="Rated by buyers like you" />
+                {loanPartners.filter((p) => p.category === "bank_home_loan").length === 0 ? (
+                  <EmptyState icon={<Calculator size={22} />} title="No lenders yet" hint="Lender tie-ups will appear here soon." />
+                ) : (
+                  <div className="space-y-3 px-5 pb-5">
+                    {loanPartners
+                      .filter((p) => p.category === "bank_home_loan")
+                      .map((p) => (
+                        <div key={p.id} className="rounded-md border border-border p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-soft text-primary">
+                                <Calculator size={18} />
+                              </div>
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-semibold text-text">{p.name}</p>
+                                  {p.verified && <Badge tone="success">Verified</Badge>}
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-text-subtle">
+                                  {p.city} · {p.rating}★ · {p.deals} deals · {p.conversion}% conversion
+                                </p>
+                              </div>
+                            </div>
+                            <a
+                              href={`mailto:care@estateflow.in?subject=Home%20loan%20enquiry%20—%20${encodeURIComponent(p.name)}%20—%20Unit%20${unit.no}`}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-primary-hover cursor-pointer"
+                            >
+                              Apply <ArrowUpRight size={13} />
+                            </a>
+                          </div>
+                          <ul className="mt-3 flex flex-wrap gap-2">
+                            {p.services.map((s) => (
+                              <li key={s} className="rounded-full bg-surface-muted/70 px-2.5 py-1 text-[11px] text-text-muted">{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            <div className="space-y-4">
+              <Card className="p-5">
+                <p className="text-sm font-semibold text-text">Other partner services</p>
+                <p className="mt-0.5 text-xs text-text-muted">Curated vendors for your move-in journey.</p>
+                <div className="mt-4 space-y-3">
+                  {loanPartners
+                    .filter((p) => p.category !== "bank_home_loan")
+                    .map((p) => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 rounded-md border border-border p-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-text">{p.name}</p>
+                          <p className="mt-0.5 text-[11px] text-text-subtle">
+                            {p.category.replace("_", " ")} · {p.rating}★ · {p.deals} deals
+                          </p>
+                        </div>
+                        <Badge tone="info">{p.conversion}%</Badge>
+                      </div>
+                    ))}
+                </div>
+                <a
+                  href={`mailto:care@estateflow.in?subject=Move-in%20services%20—%20Unit%20${unit.no}`}
+                  className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-medium text-primary transition-colors duration-200 hover:bg-surface-muted cursor-pointer"
+                >
+                  <PhoneCall size={13} /> Get help with services
+                </a>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "events" && (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-gradient-to-r from-primary-soft/40 to-surface px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white">
+                <PartyPopper size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text">Owner Events</p>
+                <p className="text-xs text-text-muted">Meets, walkthroughs and community gatherings for owners</p>
+              </div>
+            </div>
+            <Badge tone="primary">{events.length} upcoming</Badge>
+          </div>
+          {events.length === 0 ? (
+            <EmptyState icon={<PartyPopper size={22} />} title="No upcoming events" hint="We'll invite you to the next meet as soon as it's planned." />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {events.map((ev) => (
+                <Card key={ev.id} className="p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-md bg-primary-soft text-primary">
+                        <CalendarDays size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-text">{ev.title}</p>
+                        <p className="mt-0.5 text-xs text-text-muted">
+                          {new Date(ev.startsAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge tone={eventTone[ev.type]}>{ev.type.replace("_", " ")}</Badge>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-text-muted">{ev.description}</p>
+                  <p className="mt-3 flex items-center gap-1.5 text-[11px] text-text-subtle">
+                    <Building2 size={12} /> {ev.location} · capacity {ev.capacity}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+                    {ev.rsvp === "going" ? (
+                      <>
+                        <Badge tone="success">You're going</Badge>
+                        <Button variant="ghost" size="sm" onClick={() => setRsvpBusy(true)} disabled={rsvpBusy}>
+                          Change RSVP
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={rsvpBusy}
+                          onClick={async () => {
+                            setRsvpBusy(true);
+                            try {
+                              await apiSend("/api/portal/events/rsvp", {
+                                method: "POST",
+                                body: JSON.stringify({ eventId: ev.id, status: "going" }),
+                              });
+                              await refreshPortal();
+                            } finally {
+                              setRsvpBusy(false);
+                            }
+                          }}
+                        >
+                          <Check size={13} /> I'm going
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={rsvpBusy}
+                          onClick={async () => {
+                            setRsvpBusy(true);
+                            try {
+                              await apiSend("/api/portal/events/rsvp", {
+                                method: "POST",
+                                body: JSON.stringify({ eventId: ev.id, status: "interested" }),
+                              });
+                              await refreshPortal();
+                            } finally {
+                              setRsvpBusy(false);
+                            }
+                          }}
+                        >
+                          Interested
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "support" && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="space-y-4 lg:col-span-2">
@@ -655,6 +1234,9 @@ export function PortalView() {
                         <Badge tone={prioTone[t.priority]}>{t.priority}</Badge>
                         <Badge tone={statusTone[t.status]}>{statusLabel[t.status]}</Badge>
                       </div>
+                      <Button variant="ghost" size="sm" onClick={() => openThread(t.id)} disabled={threadBusy}>
+                        <MessagesSquare size={13} /> Thread
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -739,6 +1321,48 @@ export function PortalView() {
                 Average response under 4 working hours · every request tracked via ticket number.
               </p>
             </Card>
+
+            <Card className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-success-soft text-success">
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text">KYC verification</p>
+                  <p className="text-xs text-text-muted">
+                    {kyc.status === "verified" ? "Verified · Aadhaar & PAN on record" : "Required for documents & eSign"}
+                  </p>
+                </div>
+              </div>
+              {kyc.status === "verified" ? (
+                <div className="mt-4 flex items-center gap-2 rounded-md bg-success-soft/60 px-3 py-2.5 text-xs text-success">
+                  <Check size={14} /> KYC verified on record — no action needed
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <Input
+                    label="PAN"
+                    value={kycForm.pan}
+                    onChange={(v) => setKycForm((f) => ({ ...f, pan: v.toUpperCase() }))}
+                    placeholder="ABCDE1234F"
+                  />
+                  <Input
+                    label="Aadhaar (last 4 digits)"
+                    value={kycForm.aadhaarLast4}
+                    onChange={(v) => setKycForm((f) => ({ ...f, aadhaarLast4: v.replace(/\D/g, "").slice(0, 4) }))}
+                    placeholder="4521"
+                  />
+                  <Button
+                    className="w-full"
+                    disabled={kycBusy || !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(kycForm.pan) || !/^\d{4}$/.test(kycForm.aadhaarLast4)}
+                    onClick={submitKyc}
+                  >
+                    {kycBusy ? (<><Loader2 size={13} className="animate-spin" /> Verifying…</>) : "Verify KYC"}
+                  </Button>
+                  <p className="text-[11px] text-text-subtle">Encrypted · used only for statutory compliance</p>
+                </div>
+              )}
+            </Card>
           </div>
         </div>
       )}
@@ -768,23 +1392,39 @@ export function PortalView() {
                     <div
                       className={cn(
                         "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2",
-                        s.status === "done"
+                        s.status === "done" || possession.signed.includes(s.name)
                           ? "border-success bg-success text-white"
                           : s.status === "scheduled"
                             ? "border-primary bg-primary-soft text-primary"
                             : "border-border bg-surface-muted text-text-subtle",
                       )}
                     >
-                      {s.status === "done" ? <Check size={13} /> : s.status === "scheduled" ? <CalendarClock size={13} /> : <Clock size={13} />}
+                      {s.status === "done" || possession.signed.includes(s.name) ? <Check size={13} /> : s.status === "scheduled" ? <CalendarClock size={13} /> : <Clock size={13} />}
                     </div>
                     <div className="flex flex-1 items-start justify-between gap-3">
                       <div>
                         <p className="text-sm text-text">{s.name}</p>
                         {s.date && <p className="mt-0.5 text-xs text-text-subtle">{s.date}</p>}
                       </div>
-                      {s.status === "done" && <Badge tone="success">Done</Badge>}
-                      {s.status === "scheduled" && <Badge tone="primary">Scheduled</Badge>}
-                      {s.status === "pending" && <Badge tone="muted">Pending</Badge>}
+                      <div className="flex items-center gap-2">
+                        {s.status === "done" && <Badge tone="success">Done</Badge>}
+                        {s.status === "scheduled" && !possession.signed.includes(s.name) && <Badge tone="primary">Scheduled</Badge>}
+                        {s.status === "pending" && !possession.signed.includes(s.name) && <Badge tone="muted">Pending</Badge>}
+                        {possession.signed.includes(s.name) && (
+                          <Badge tone="success"><Check size={11} /> Signed</Badge>
+                        )}
+                        {(s.status === "scheduled" || s.status === "pending") && !possession.signed.includes(s.name) && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={signing === s.name}
+                            onClick={() => signStep(s.name)}
+                          >
+                            {signing === s.name ? <Loader2 size={13} className="animate-spin" /> : <ClipboardCheck size={13} />}
+                            Sign off
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -810,6 +1450,28 @@ export function PortalView() {
               )}
             </Card>
           </div>
+
+          <Card>
+            <CardHeader title="Warranty & handover documents" subtitle="Coverage registered in your name" />
+            {warranty.length === 0 ? (
+              <EmptyState icon={<ShieldCheck size={22} />} title="No warranty documents yet" hint="Warranty policies will appear here after possession." />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 px-5 pb-5 sm:grid-cols-3">
+                {warranty.map((w) => (
+                  <div key={w.id} className="rounded-md border border-border p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-success-soft text-success">
+                        <ShieldCheck size={16} />
+                      </div>
+                      <Badge tone={warrantyTone[w.status]}>{w.status}</Badge>
+                    </div>
+                    <p className="mt-3 text-sm font-medium text-text">{w.title}</p>
+                    <p className="mt-1 text-[11px] text-text-subtle">Issued {w.issued}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       )}
 
@@ -842,15 +1504,32 @@ export function PortalView() {
             </Card>
 
             <Card className="p-5">
-              <p className="text-sm font-semibold text-text">How it works</p>
-              <ol className="mt-3 space-y-3">
-                {HOW_IT_WORKS.map((s, i) => (
-                  <li key={s} className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-soft text-[11px] font-semibold text-primary">{i + 1}</span>
-                    <span className="text-xs leading-relaxed text-text-muted">{s}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-warning-soft text-warning">
+                  <Star size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-text">Owner Rewards</p>
+                  <p className="text-xs text-text-muted">Loyalty points with every milestone</p>
+                </div>
+              </div>
+              <div className="mt-4 flex items-end justify-between rounded-md bg-surface-muted/60 p-4">
+                <div>
+                  <p className="text-3xl font-semibold text-text tabular-nums">{loyalty.points}</p>
+                  <p className="mt-0.5 text-[11px] text-text-muted">points</p>
+                </div>
+                <Badge tone={tierTone[loyalty.tier]}>{loyalty.tier} tier</Badge>
+              </div>
+              <ul className="mt-4 space-y-2.5">
+                {loyalty.perks.map((p) => (
+                  <li key={p} className="flex items-start gap-2 text-xs leading-relaxed text-text-muted">
+                    <Check size={13} className="mt-0.5 shrink-0 text-success" /> {p}
                   </li>
                 ))}
-              </ol>
+              </ul>
+              <div className="mt-4 flex items-center gap-2 rounded-md bg-success-soft/60 px-3 py-2 text-xs text-success">
+                <Sparkles size={13} /> +250 points per referral converted
+              </div>
             </Card>
           </div>
 
@@ -878,6 +1557,77 @@ export function PortalView() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Sell or rent your home"
+              subtitle="List on the owner marketplace — visible to verified buyers"
+              action={<Badge tone="success">{listings.filter((l) => l.status === "active").length} active</Badge>}
+            />
+            {listings.length > 0 && (
+              <div className="space-y-3 px-5 pb-4">
+                {listings.map((l) => (
+                  <div key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-soft text-primary">
+                        <Tag size={15} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-text">{l.title}</p>
+                        <p className="mt-0.5 text-[11px] text-text-subtle">{l.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={l.listingType === "sale" ? "primary" : "info"}>{l.listingType}</Badge>
+                      <p className="text-sm font-semibold text-text tabular-nums">{inr(l.price, 0)}</p>
+                      <Badge tone="success">{l.status}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="border-t border-border px-5 py-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Select
+                  label="Listing type"
+                  value={listingForm.listingType}
+                  onChange={(v) => setListingForm((f) => ({ ...f, listingType: v }))}
+                  options={[
+                    { value: "sale", label: "For sale" },
+                    { value: "rent", label: "For rent" },
+                  ]}
+                />
+                <Input
+                  label="Price (₹)"
+                  value={listingForm.price}
+                  onChange={(v) => setListingForm((f) => ({ ...f, price: v.replace(/[^\d]/g, "") }))}
+                  placeholder="16000000"
+                />
+                <Input
+                  label="Title"
+                  value={listingForm.title}
+                  onChange={(v) => setListingForm((f) => ({ ...f, title: v }))}
+                  placeholder="3BHK for sale — Tower 1"
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                <Input
+                  label="Short description (optional)"
+                  value={listingForm.description}
+                  onChange={(v) => setListingForm((f) => ({ ...f, description: v }))}
+                  placeholder="Corner unit, 1650 sqft, east-facing…"
+                />
+                <Button disabled={listingBusy} onClick={publishListing}>
+                  {listingBusy ? <Loader2 size={13} className="animate-spin" /> : <Tag size={13} />}
+                  Publish listing
+                </Button>
+              </div>
+              {listingMsg && <p className="mt-3 text-xs text-primary">{listingMsg}</p>}
+              <p className="mt-3 text-[11px] text-text-subtle">
+                Listings are reviewed and published to the marketplace within 1 working day. No listing fee for owners.
+              </p>
             </div>
           </Card>
         </div>

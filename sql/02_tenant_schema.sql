@@ -493,6 +493,9 @@ CREATE TABLE customers (
     address_id    uuid REFERENCES addresses(id),
     primary_phone varchar(20),
     primary_email varchar(320),
+    loyalty_points int NOT NULL DEFAULT 0,
+    loyalty_tier  varchar(20) NOT NULL DEFAULT 'member'
+                            CHECK (loyalty_tier IN ('member','silver','gold','platinum')),
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -1290,6 +1293,64 @@ CREATE TABLE notifications (
 );
 
 CREATE INDEX idx_notifications_user ON notifications(user_id, status, created_at DESC);
+
+-- ---------------------------------------------------------------------
+-- 11b. PORTAL: SITE PHOTOS, EVENTS, OWNER LISTINGS
+-- Construction photo/video updates, homeowner events with RSVP and
+-- owner-led resale/rent listings surfaced in the customer portal.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE site_photos (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id  uuid REFERENCES projects(id),
+    tower_id    uuid REFERENCES towers(id),
+    media_type  varchar(20) NOT NULL DEFAULT 'photo' CHECK (media_type IN ('photo','video')),
+    url         text NOT NULL,
+    thumb_url   text,
+    caption     varchar(255),
+    shot_on     date,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE events (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id  uuid REFERENCES projects(id),
+    title       varchar(255) NOT NULL,
+    description text,
+    event_type  varchar(40) NOT NULL DEFAULT 'community'
+                            CHECK (event_type IN ('homeowner_meet','site_walkthrough','webinar','festival','community')),
+    starts_at   timestamptz NOT NULL,
+    location    varchar(200),
+    capacity    int,
+    is_active   boolean NOT NULL DEFAULT true,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE event_rsvps (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id    uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    customer_id uuid NOT NULL REFERENCES customers(id),
+    status      varchar(20) NOT NULL DEFAULT 'going'
+                            CHECK (status IN ('going','interested','declined')),
+    rsvped_at   timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (event_id, customer_id)
+);
+
+CREATE INDEX idx_rsvp_event ON event_rsvps(event_id);
+CREATE INDEX idx_rsvp_customer ON event_rsvps(customer_id);
+
+CREATE TABLE owner_listings (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id  uuid NOT NULL REFERENCES customers(id),
+    unit_id      uuid REFERENCES units(id),
+    listing_type varchar(20) NOT NULL CHECK (listing_type IN ('sale','rent')),
+    title        varchar(255) NOT NULL,
+    description  text,
+    price        numeric(19,2) NOT NULL,
+    status       varchar(20) NOT NULL DEFAULT 'active'
+                             CHECK (status IN ('draft','active','sold','closed','rented')),
+    created_at   timestamptz NOT NULL DEFAULT now()
+);
 
 -- ---------------------------------------------------------------------
 -- 12. FACILITY MANAGEMENT & SOCIETY OPERATIONS

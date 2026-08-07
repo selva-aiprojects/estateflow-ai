@@ -66,6 +66,24 @@ import {
   portalPossessionSteps,
   portalSnags,
   portalReferralProgram,
+  type PortalPhoto,
+  portalPhotos,
+  type PortalEvent,
+  portalEvents,
+  type PortalLoanPartner,
+  portalLoanPartners,
+  type PortalWarrantyDoc,
+  portalWarrantyDocs,
+  type PortalResaleListing,
+  portalResaleListings,
+  type PortalLoyalty,
+  portalLoyalty,
+  type PortalKyc,
+  portalKyc,
+  type PortalTaxSummary,
+  portalTaxSummary,
+  type PortalChatMessage,
+  portalChatMessages,
 } from "@/lib/data";
 
 type DbRow = Record<string, unknown>;
@@ -980,8 +998,17 @@ export interface PortalPayload {
   };
   updates: PortalUpdate[];
   tickets: PortalTicket[];
-  possession: { steps: PortalPossessionStep[]; snags: PortalSnag[]; possessionDate: string };
+  possession: { steps: PortalPossessionStep[]; snags: PortalSnag[]; possessionDate: string; signed: string[] };
   referrals: PortalReferralProgram;
+  photos: PortalPhoto[];
+  tax: PortalTaxSummary;
+  loanPartners: PortalLoanPartner[];
+  events: PortalEvent[];
+  warranty: PortalWarrantyDoc[];
+  loyalty: PortalLoyalty;
+  kyc: PortalKyc;
+  listings: PortalResaleListing[];
+  chat: PortalChatMessage[];
 }
 
 export interface PortalTicketInput {
@@ -991,7 +1018,7 @@ export interface PortalTicketInput {
   description?: string;
 }
 
-async function fetchPortalCustomer(): Promise<{ customerId: string; unitId: string; projectId: string }> {
+export async function fetchPortalCustomer(): Promise<{ customerId: string; unitId: string; projectId: string }> {
   const row = await qOne<DbRow>(`
     SELECT bk.customer_id, bk.unit_id, u.block_id, f.tower_id
     FROM bookings bk
@@ -1089,6 +1116,207 @@ async function fetchPortalReferrals(): Promise<PortalReferralProgram> {
   };
 }
 
+async function fetchPortalPhotos(projectId: string): Promise<PortalPhoto[]> {
+  const rows = await q<DbRow>(
+    `SELECT id, media_type, url, COALESCE(thumb_url, url) AS thumb, caption, shot_on
+     FROM site_photos
+     WHERE project_id = $1 OR project_id IS NULL
+     ORDER BY shot_on DESC NULLS LAST, created_at DESC
+     LIMIT 12`,
+    [projectId],
+  );
+  if (!rows.length) return portalPhotos;
+  return rows.map((r) => ({
+    id: str(r.id),
+    mediaType: (str(r.media_type) === "video" ? "video" : "photo") as PortalPhoto["mediaType"],
+    url: str(r.url),
+    thumb: str(r.thumb),
+    caption: str(r.caption),
+    shotOn: dateStr(r.shot_on),
+  }));
+}
+
+async function fetchPortalTax(customerId: string): Promise<PortalTaxSummary> {
+  const row = await qOne<DbRow>(
+    `SELECT COALESCE(SUM(base_amount),0) base, COALESCE(SUM(cgst),0) cgst, COALESCE(SUM(sgst),0) sgst,
+            COALESCE(SUM(igst),0) igst, COALESCE(SUM(tds),0) tds, COALESCE(SUM(total_amount),0) total
+     FROM invoices WHERE customer_id = $1`,
+    [customerId],
+  );
+  if (!row || num(row.total) <= 0) return portalTaxSummary;
+  return {
+    baseAmount: num(row.base),
+    cgst: num(row.cgst),
+    sgst: num(row.sgst),
+    igst: num(row.igst),
+    tds: num(row.tds),
+    total: num(row.total),
+  };
+}
+
+async function fetchPortalLoanPartners(): Promise<PortalLoanPartner[]> {
+  const rows = await q<DbRow>(`
+    SELECT p.id, p.name, p.partner_type, p.city, p.rating, p.deals, p.conversion, p.status,
+           COALESCE(array_agg(DISTINCT ps.service_name) FILTER (WHERE ps.service_name IS NOT NULL), '{}') AS services
+    FROM marketplace_partners p
+    LEFT JOIN partner_services ps ON ps.partner_id = p.id
+    WHERE p.partner_type = 'bank_home_loan'
+    GROUP BY p.id
+    ORDER BY p.rating DESC, p.deals DESC
+    LIMIT 8`);
+  if (!rows.length) return portalLoanPartners;
+  return rows.map((r) => ({
+    id: str(r.id),
+    name: str(r.name),
+    category: str(r.partner_type),
+    city: str(r.city),
+    rating: num(r.rating),
+    deals: num(r.deals),
+    conversion: num(r.conversion),
+    verified: str(r.status) === "verified" || str(r.status) === "active",
+    services: Array.isArray(r.services) ? r.services.map(String) : [],
+  }));
+}
+
+async function fetchPortalEvents(customerId: string): Promise<PortalEvent[]> {
+  const rows = await q<DbRow>(
+    `SELECT e.id, e.title, e.event_type, e.description, e.starts_at, e.location, e.capacity,
+            (SELECT status FROM event_rsvps r WHERE r.event_id = e.id AND r.customer_id = $1 LIMIT 1) AS my_rsvp
+     FROM events e
+     WHERE e.is_active = true
+     ORDER BY e.starts_at
+     LIMIT 10`,
+    [customerId],
+  );
+  if (!rows.length) return portalEvents;
+  return rows.map((r) => ({
+    id: str(r.id),
+    title: str(r.title),
+    type: (str(r.event_type) || "community") as PortalEvent["type"],
+    description: str(r.description),
+    startsAt: new Date(str(r.starts_at)).toISOString(),
+    location: str(r.location),
+    capacity: num(r.capacity),
+    rsvp: (r.my_rsvp ? str(r.my_rsvp) : undefined) as PortalEvent["rsvp"],
+  }));
+}
+
+async function fetchPortalWarranty(): Promise<PortalWarrantyDoc[]> {
+  const rows = await q<DbRow>(
+    `SELECT id, title, status, updated_at
+     FROM documents
+     WHERE doc_type IN ('warranty','handover','possession_letter')
+     ORDER BY created_at, id`,
+  );
+  if (!rows.length) return portalWarrantyDocs;
+  return rows.map((r) => ({
+    id: str(r.id),
+    title: str(r.title),
+    status: (str(r.status) || "draft") as PortalWarrantyDoc["status"],
+    issued: dateStr(r.updated_at),
+  }));
+}
+
+async function fetchPortalLoyalty(customerId: string): Promise<PortalLoyalty> {
+  const row = await qOne<DbRow>(
+    `SELECT loyalty_points, loyalty_tier FROM customers WHERE id = $1`,
+    [customerId],
+  );
+  if (!row) return portalLoyalty;
+  const tier = (str(row.loyalty_tier) || "member") as PortalLoyalty["tier"];
+  const perks =
+    tier === "platinum" ? portalLoyalty.perks
+    : tier === "gold" ? ["Priority service desk", "Referral bonus boost (₹75,000)", "Invites to member-only events"]
+    : tier === "silver" ? ["Priority service desk", "Referral bonus boost (₹75,000)", "Invites to member-only events"]
+    : ["Invites to community events", "Birthday greetings & offers"];
+  return { points: num(row.loyalty_points), tier, perks };
+}
+
+async function fetchPortalKyc(customerId: string): Promise<PortalKyc> {
+  const row = await qOne<DbRow>(
+    `SELECT kyc_status, pan, aadhaar_hash FROM customers WHERE id = $1`,
+    [customerId],
+  );
+  if (!row) return portalKyc;
+  return {
+    status: (str(row.kyc_status) || "pending") as PortalKyc["status"],
+    pan: str(row.pan),
+    aadhaarLast4: str(row.aadhaar_hash) ? str(row.aadhaar_hash).slice(-4) : "",
+  };
+}
+
+async function fetchPortalListings(customerId: string): Promise<PortalResaleListing[]> {
+  const rows = await q<DbRow>(
+    `SELECT id, listing_type, title, description, price, status
+     FROM owner_listings
+     WHERE customer_id = $1
+     ORDER BY created_at DESC
+     LIMIT 10`,
+    [customerId],
+  );
+  if (!rows.length) return portalResaleListings;
+  return rows.map((r) => ({
+    id: str(r.id),
+    listingType: (str(r.listing_type) || "sale") as PortalResaleListing["listingType"],
+    title: str(r.title),
+    description: str(r.description),
+    price: num(r.price),
+    status: (str(r.status) || "active") as PortalResaleListing["status"],
+  }));
+}
+
+export async function fetchPortalChat(customerId: string): Promise<PortalChatMessage[]> {
+  const rows = await q<DbRow>(`
+    SELECT m.role, m.content, COALESCE((m.payload->>'seq')::int, 0) AS seq
+    FROM ai_messages m
+    JOIN ai_conversations c ON c.id = m.conversation_id
+    LEFT JOIN leads l ON l.id = c.lead_id
+    WHERE c.customer_id = $1 OR l.converted_customer = $1
+    ORDER BY m.created_at, seq
+    LIMIT 40`,
+    [customerId],
+  );
+  if (!rows.length) return portalChatMessages;
+  return rows.map((r) => ({
+    from: (str(r.role) === "assistant" ? "ai" : "user") as PortalChatMessage["from"],
+    text: str(r.content),
+  }));
+}
+
+async function portalConversationId(customerId: string): Promise<string | null> {
+  const convo = await qOne<DbRow>(`
+    SELECT c.id FROM ai_conversations c
+    LEFT JOIN leads l ON l.id = c.lead_id
+    WHERE c.customer_id = $1 OR l.converted_customer = $1
+    ORDER BY c.created_at LIMIT 1`,
+    [customerId],
+  );
+  return convo ? str(convo.id) : null;
+}
+
+function portalAiReply(text: string, context: { nextDue?: string; nextAmount?: number; progress?: number }): string {
+  const t = text.toLowerCase();
+  if (/payment|emi|installment|due|pay/.test(t))
+    return context.nextAmount
+      ? `Your next installment of ₹${Math.round(context.nextAmount).toLocaleString("en-IN")} is due ${context.nextDue}. You're on track — nothing is overdue. You can also pay online from the Payments tab.`
+      : "All your scheduled payments are on track. You can see the full schedule in the Payments tab.";
+  if (/progress|construction|slab|building|tower/.test(t))
+    return `Tower T1 is at ${context.progress ?? 68}% overall. Level 5 slab shutter work is in progress and we're ~2 days ahead of schedule. Photos are in the Site Updates tab.`;
+  if (/possession|handover|key/.test(t))
+    return "Target possession is January 2028. Structure completion and RERA registration are done; occupancy NOC is scheduled for 12 Sep 2026. Track every step in the Possession tab.";
+  if (/warranty|defect/.test(t))
+    return "Your 5-year structural warranty and 2-year fittings warranty are active. To raise a defect, open a support ticket with the Snagging category.";
+  if (/amenit|club|pool|gym/.test(t))
+    return "Your unit includes 30+ amenities — clubhouse, pool, gym, co-working and more. The full list is on the Amenities tab.";
+  if (/event|meet|rsvp/.test(t))
+    return "The Homeowner Meet is on 13 Sep 2026 and a T1 site walkthrough on 20 Sep. RSVP from the Events tab — seats are limited.";
+  if (/refer|reward|bonus/.test(t))
+    return `Your referral code is RMH-2026. You've earned ₹50,000 and have 3 successful referrals so far.`;
+  if (/loan|finance|emi.*rate/.test(t))
+    return "Axis Bank and HDFC offer pre-approved home loans for this project. Use the EMI calculator on the Home Loans tab to estimate your monthly payment.";
+  return "I can help with payments, construction progress, possession, amenities, events and support tickets. What would you like to know?";
+}
+
 export async function getPortal(): Promise<PortalPayload> {
   const milestones = await fetchMilestones();
   const unitRow = await qOne<DbRow>(`
@@ -1169,18 +1397,48 @@ export async function getPortal(): Promise<PortalPayload> {
     fetchPortalCustomer(),
     fetchPortalReferrals(),
   ]);
-  const [tickets, snags] = await Promise.all([
+  const [
+    tickets,
+    snags,
+    photos,
+    tax,
+    loanPartners,
+    events,
+    warranty,
+    loyalty,
+    kyc,
+    listings,
+    chat,
+  ] = await Promise.all([
     fetchPortalTickets(customer.customerId),
     fetchPortalSnags(customer.customerId),
+    fetchPortalPhotos(customer.projectId),
+    fetchPortalTax(customer.customerId),
+    fetchPortalLoanPartners(),
+    fetchPortalEvents(customer.customerId),
+    fetchPortalWarranty(),
+    fetchPortalLoyalty(customer.customerId),
+    fetchPortalKyc(customer.customerId),
+    fetchPortalListings(customer.customerId),
+    fetchPortalChat(customer.customerId),
   ]);
+
+  const signoffRow = await qOne<DbRow>(`SELECT value FROM app_config WHERE key = 'portal_handover'`);
+  const signedSteps = signoffRow && signoffRow.value && Array.isArray((signoffRow.value as Record<string, unknown>).signedSteps)
+    ? ((signoffRow.value as Record<string, unknown>).signedSteps as string[])
+    : [];
 
   const possession = {
     steps: portalPossessionSteps,
     snags,
     possessionDate: "Jan 2028",
+    signed: signedSteps,
   };
 
-  return { milestones, unit, instalments, docs, amenities, ledger, updates, tickets, possession, referrals };
+  return {
+    milestones, unit, instalments, docs, amenities, ledger, updates, tickets, possession, referrals,
+    photos, tax, loanPartners, events, warranty, loyalty, kyc, listings, chat,
+  };
 }
 
 export async function createPortalTicket(input: PortalTicketInput): Promise<PortalTicket> {
@@ -1216,6 +1474,167 @@ export async function createPortalTicket(input: PortalTicketInput): Promise<Port
       ageDays: 0,
     };
   }
+}
+
+export async function payPortalInstallment(lineId: string, amount: number): Promise<{ ok: boolean; message: string }> {
+  try {
+    const customer = await fetchPortalCustomer();
+    const line = await qOne<DbRow>(
+      `SELECT psl.schedule_id, psl.amount, psl.paid_amount, psl.total_due, ps.booking_id
+       FROM payment_schedule_lines psl
+       JOIN payment_schedules ps ON ps.id = psl.schedule_id
+       WHERE psl.id = $1`,
+      [lineId],
+    );
+    if (!line) return { ok: false, message: "Installment not found" };
+    const paidAmount = num(line.paid_amount) + amount;
+    const status = paidAmount >= num(line.total_due) ? "paid" : paidAmount > 0 ? "partially_paid" : "pending";
+    await q(
+      `UPDATE payment_schedule_lines SET paid_amount = $1, status = $2 WHERE id = $3`,
+      [paidAmount, status, lineId],
+    );
+    const receiptNo = `RCPT-2026-${String(Math.floor(100 + Math.random() * 900))}GW`;
+    await q(
+      `INSERT INTO receipts (id, receipt_no, customer_id, booking_id, amount, payment_mode, gateway_txn_id, reference, received_at, received_by, posted)
+       VALUES ($1, $2, $3, $4, $5, 'gateway', $6, $7, now(), $8, true)`,
+      [randomUUID(), receiptNo, customer.customerId || null, str(line.booking_id), amount,
+       `GWP-${randomUUID().slice(0, 12)}`, `GATEWAY/UPI/${Date.now()}`, null],
+    );
+    return { ok: true, message: `Payment received. Receipt ${receiptNo} generated.` };
+  } catch {
+    return { ok: false, message: "Payment could not be processed. Please try again." };
+  }
+}
+
+export async function addPortalChat(customerId: string, text: string): Promise<PortalChatMessage[]> {
+  const convoId = await portalConversationId(customerId);
+  if (convoId) {
+    const seq =
+      (await qVal<number>(`SELECT COALESCE(MAX(COALESCE((payload->>'seq')::int, 0)), 0) + 1 AS v FROM ai_messages WHERE conversation_id = $1`, [convoId])) ?? 0;
+    await q(
+      `INSERT INTO ai_messages (id, conversation_id, role, content, payload, created_at)
+       VALUES ($1, $2, 'user', $3, $4, now())`,
+      [randomUUID(), convoId, text, JSON.stringify({ seq })],
+    );
+  }
+  const next = await qOne<DbRow>(`
+    SELECT psl.label, psl.due_date, psl.total_due, psl.paid_amount
+    FROM payment_schedule_lines psl
+    JOIN payment_schedules ps ON ps.id = psl.schedule_id
+    WHERE psl.status IN ('pending','due','partially_paid')
+    ORDER BY psl.installment_no LIMIT 1`);
+  const progressRow = await qVal<number>(`SELECT progress_pct FROM dprs ORDER BY report_date DESC LIMIT 1`);
+  const reply = portalAiReply(text, {
+    nextDue: next ? dateStr(next.due_date) : undefined,
+    nextAmount: next ? num(next.total_due) - num(next.paid_amount) : undefined,
+    progress: progressRow ?? undefined,
+  });
+  if (convoId) {
+    const seq =
+      (await qVal<number>(`SELECT COALESCE(MAX(COALESCE((payload->>'seq')::int, 0)), 0) + 1 AS v FROM ai_messages WHERE conversation_id = $1`, [convoId])) ?? 0;
+    await q(
+      `INSERT INTO ai_messages (id, conversation_id, role, content, payload, created_at)
+       VALUES ($1, $2, 'assistant', $3, $4, now())`,
+      [randomUUID(), convoId, reply, JSON.stringify({ seq })],
+    );
+  }
+  return [
+    { from: "user", text },
+    { from: "ai", text: reply },
+  ];
+}
+
+export async function completePortalKyc(pan: string, aadhaarLast4: string): Promise<PortalKyc> {
+  const customer = await fetchPortalCustomer();
+  await q(
+    `UPDATE customers SET pan = $1, aadhaar_hash = $2, kyc_status = 'verified', updated_at = now() WHERE id = $3`,
+    [pan, aadhaarLast4, customer.customerId],
+  );
+  return { status: "verified", pan, aadhaarLast4 };
+}
+
+export async function addTicketComment(ticketId: string, body: string, isInternal = false): Promise<{ ok: boolean }> {
+  try {
+    await q(
+      `INSERT INTO ticket_comments (id, ticket_id, author_id, is_internal, body, created_at)
+       VALUES ($1, $2, $3, $4, $5, now())`,
+      [randomUUID(), ticketId, null, isInternal, body],
+    );
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function escalateTicket(ticketId: string): Promise<{ ok: boolean; status: string; priority: string }> {
+  await q(
+    `UPDATE tickets SET status = 'in_progress', priority = 'urgent' WHERE id = $1`,
+    [ticketId],
+  );
+  return { ok: true, status: "in_progress", priority: "urgent" };
+}
+
+export async function setEventRsvp(eventId: string, status: "going" | "interested" | "declined"): Promise<{ ok: boolean }> {
+  try {
+    const customer = await fetchPortalCustomer();
+    await q(
+      `INSERT INTO event_rsvps (id, event_id, customer_id, status, rsvped_at)
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (event_id, customer_id) DO UPDATE SET status = EXCLUDED.status, rsvped_at = now()`,
+      [randomUUID(), eventId, customer.customerId, status],
+    );
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function createOwnerListing(input: { listingType: "sale" | "rent"; title: string; description?: string; price: number }): Promise<{ ok: boolean; message: string }> {
+  try {
+    const customer = await fetchPortalCustomer();
+    await q(
+      `INSERT INTO owner_listings (id, customer_id, unit_id, listing_type, title, description, price, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', now())`,
+      [randomUUID(), customer.customerId, customer.unitId || null, input.listingType, input.title, input.description ?? null, input.price],
+    );
+    return { ok: true, message: "Listing published to the community marketplace." };
+  } catch {
+    return { ok: false, message: "Could not publish listing. Please try again." };
+  }
+}
+
+export async function signPortalPossession(stepName: string): Promise<{ ok: boolean; signed: string[] }> {
+  try {
+    const row = await qOne<DbRow>(`SELECT value FROM app_config WHERE key = 'portal_handover'`);
+    const current = row && row.value && Array.isArray((row.value as Record<string, unknown>).signedSteps)
+      ? ((row.value as Record<string, unknown>).signedSteps as string[])
+      : [];
+    const next = current.includes(stepName) ? current : [...current, stepName];
+    await q(
+      `INSERT INTO app_config (key, value, updated_by, updated_at)
+       VALUES ('portal_handover', $1, NULL, now())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+      [JSON.stringify({ signedSteps: next })],
+    );
+    return { ok: true, signed: next };
+  } catch {
+    return { ok: false, signed: [] };
+  }
+}
+
+export async function getPortalTicketThread(ticketId: string): Promise<{ id: string; no: string; subject: string; status: string; priority: string; openedAt: string; comments: { body: string; createdAt: string; isInternal: boolean }[] } | null> {
+  const t = await qOne<DbRow>(`SELECT id, ticket_no, subject, status, priority, opened_at FROM tickets WHERE id = $1`, [ticketId]);
+  if (!t) return null;
+  const comments = await q<DbRow>(`SELECT body, created_at, is_internal FROM ticket_comments WHERE ticket_id = $1 ORDER BY created_at ASC`, [ticketId]);
+  return {
+    id: str(t.id),
+    no: str(t.ticket_no),
+    subject: str(t.subject),
+    status: str(t.status),
+    priority: str(t.priority),
+    openedAt: str(t.opened_at),
+    comments: comments.map((c) => ({ body: str(c.body), createdAt: str(c.created_at), isInternal: !!c.is_internal })),
+  };
 }
 
 // ---------------------------------------------------------------------------

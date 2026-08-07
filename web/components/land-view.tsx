@@ -28,7 +28,6 @@ import {
   type UnitStatus,
 } from "@/lib/data";
 import { useApiData, apiSend } from "@/lib/api-client";
-import { useTenant } from "@/lib/tenant-context";
 import { inr, inrCompact, formatAcres } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { PageSkeleton } from "@/components/loading";
@@ -52,7 +51,6 @@ const titleOrder = ["clear", "in_review", "disputed", "litigation"] as const;
 const plotStatusOrder: UnitStatus[] = ["available", "blocked", "token_paid", "sold", "under_maintenance"];
 
 export function LandView() {
-  const { plan, has } = useTenant();
   const [land] = useApiData<LandPayload>("/api/land");
   const [tab, setTab] = useState<"parcels" | "plots">("parcels");
   const [selectedParcel, setSelectedParcel] = useState<LandParcel | null>(null);
@@ -137,7 +135,7 @@ export function LandView() {
         action={
           <Badge tone="success">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            {plan.name} plan active
+            Live inventory
           </Badge>
         }
       />
@@ -407,12 +405,6 @@ export function LandView() {
             </Card>
           </div>
         </div>
-      )}
-
-      {!has("land") && (
-        <Card className="border-warning/30 p-4 text-xs text-warning">
-          Your current plan ({plan.name}) does not include the Land Portfolio module.
-        </Card>
       )}
 
       {toast && (

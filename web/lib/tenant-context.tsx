@@ -35,7 +35,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     [setPayload],
   );
 
-  const has = useCallback((segment: Segment) => payload?.plan.segments.includes(segment) ?? false, [payload]);
+  const has = useCallback((_segment: Segment) => true, []);
 
   if (!payload) return <PageSkeleton />;
 

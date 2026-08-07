@@ -118,6 +118,7 @@ async function main() {
     "ai_agents", "ai_conversations", "ai_messages", "ai_alerts", "ai_workflow_runs",
     "site_visits", "notifications", "app_config",
     "documents", "cash_flow_forecasts", "unit_amenities",
+    "site_photos", "events", "event_rsvps", "owner_listings",
     "users",
   ];
   for (const t of wipe) {
@@ -435,6 +436,12 @@ async function main() {
     );
   }
   await run(
+    `INSERT INTO ${SCHEMA}.invoices
+      (id, invoice_no, customer_id, booking_id, invoice_type, status, base_amount, cgst, sgst, igst, cess, tds, total_amount, due_date, issued_at, gstin, posted)
+     VALUES ($1, 'INV-2026-101', $2, $3, 'customer', 'issued', 200000, 18000, 18000, 0, 0, 0, 236000, '2026-08-15', now(), '29ABCDE1234F1Z5', true)`,
+    [uuid("inv:portal-1"), portalCustomerId, bookingId],
+  );
+  await run(
     `INSERT INTO ${SCHEMA}.documents (id, doc_type, title, status) VALUES ($1, 'sale_document', 'Agreement for Sale (draft)', 'draft')`,
     [uuid("doc:portal-1")],
   );
@@ -509,6 +516,63 @@ async function main() {
     );
   }
   console.log("[8c] portal receipts / snag tickets / referrals seeded");
+
+  // ---------------------------------------------------------------------------
+  // 8d. PORTAL BATCH: SITE PHOTOS, EVENTS, WARRANTY, LOYALTY, KYC, LISTING
+  // ---------------------------------------------------------------------------
+  const portalProjectId = projectUuidByCode.get("ELEVATE")!;
+  const portalTowerId = towerUuidByCode.get("T1") ?? null;
+  const sitePhotosSeed: { id: string; mediaType: string; url: string; caption: string; shotOn: string }[] = [
+    { id: "photo1", mediaType: "photo", url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=900&q=70", caption: "Level 5 slab shutter work", shotOn: "2026-08-05" },
+    { id: "photo2", mediaType: "photo", url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=900&q=70", caption: "East wing — steel fixing for slab", shotOn: "2026-08-04" },
+    { id: "photo3", mediaType: "photo", url: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=900&q=70", caption: "T1 tower view from east approach", shotOn: "2026-08-03" },
+    { id: "video1", mediaType: "video", url: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4", caption: "Drone walkthrough — Level 4 slab cast", shotOn: "2026-08-03" },
+  ];
+  for (const p of sitePhotosSeed) {
+    await run(
+      `INSERT INTO ${SCHEMA}.site_photos (id, project_id, tower_id, media_type, url, caption, shot_on, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+      [uuid(`sphoto:${p.id}`), portalProjectId, portalTowerId, p.mediaType, p.url, p.caption, p.shotOn],
+    );
+  }
+  const portalEventsSeed: { id: string; title: string; type: string; description: string; startsAt: string; location: string; capacity: number }[] = [
+    { id: "event1", title: "Homeowner Meet — Elevate Residences", type: "homeowner_meet", description: "Meet the project team, review construction progress and discuss the year ahead for your community.", startsAt: "2026-09-13T11:00:00", location: "Sales Gallery, Elevate Residences", capacity: 120 },
+    { id: "event2", title: "Site Walkthrough — T1 Tower", type: "site_walkthrough", description: "Guided walkthrough of your tower with the construction team. Safety gear provided.", startsAt: "2026-09-20T10:00:00", location: "Gate 2, Elevate Residences", capacity: 40 },
+  ];
+  for (const e of portalEventsSeed) {
+    await run(
+      `INSERT INTO ${SCHEMA}.events (id, project_id, title, description, event_type, starts_at, location, capacity, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
+      [uuid(`event:${e.id}`), portalProjectId, e.title, e.description, e.type, e.startsAt, e.location, e.capacity],
+    );
+  }
+  await run(
+    `INSERT INTO ${SCHEMA}.event_rsvps (id, event_id, customer_id, status, rsvped_at)
+     VALUES ($1, $2, $3, 'going', now())`,
+    [uuid("rsvp:event1"), uuid("event:event1"), portalCustomerId],
+  );
+  const warrantyDocsSeed: { id: string; docType: string; title: string; status: string }[] = [
+    { id: "warranty1", docType: "warranty", title: "5-year structural warranty policy", status: "executed" },
+    { id: "warranty2", docType: "warranty", title: "2-year fittings & finishes warranty", status: "signed" },
+    { id: "handover1", docType: "handover", title: "Handover & possession letter (draft)", status: "draft" },
+  ];
+  for (const w of warrantyDocsSeed) {
+    await run(
+      `INSERT INTO ${SCHEMA}.documents (id, doc_type, title, status, project_id, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())`,
+      [uuid(`doc:${w.id}`), w.docType, w.title, w.status, portalProjectId],
+    );
+  }
+  await run(
+    `UPDATE ${SCHEMA}.customers SET loyalty_points = 1250, loyalty_tier = 'silver', kyc_status = 'pending', pan = NULL, aadhaar_hash = NULL WHERE id = $1`,
+    [portalCustomerId],
+  );
+  await run(
+    `INSERT INTO ${SCHEMA}.owner_listings (id, customer_id, unit_id, listing_type, title, description, price, status, created_at)
+     VALUES ($1, $2, $3, 'sale', '3BHK T1-03-A — Elevate Residences', 'Corner unit, 1650 sqft, east-facing. Ready for possession 2028.', 16200000, 'active', now())`,
+    [uuid("listing:portal-1"), portalCustomerId, portalUnitId],
+  );
+  console.log("[8d] portal site photos / events / warranty / loyalty / listing seeded");
 
   // ---------------------------------------------------------------------------
   // 9. CONSTRUCTION: MILESTONES + DPRs
@@ -865,10 +929,22 @@ async function main() {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [id, partnerTypeMap[p.category], p.name, p.verified ? "verified" : "pending", p.verified ? "2026-01-15" : null, p.city, p.rating, p.deals, p.conversion],
     );
-    await run(
-      `INSERT INTO ${SCHEMA}.partner_services (id, partner_id, service_name, commission_pct) VALUES ($1, $2, $3, 2.0)`,
-      [uuid(`pservice:${p.id}`), id, p.category],
-    );
+  }
+  const loanServiceMap: Record<string, string[]> = {
+    "Axis Bank — Home Loans": ["Home loan up to 85%", "Pre-approved for RERA projects", "Flexi overdraft facility"],
+    "HDFC — Prime Home Loan": ["0% processing fee for this project", "Balance transfer offers", "Part-payment without penalty"],
+  };
+  for (const [partnerName, services] of Object.entries(loanServiceMap)) {
+    const pid = partnerIdByName.get(partnerName);
+    if (!pid) continue;
+    const firstServiceId = uuid(`pservice:${marketplacePartners.find((x) => x.name === partnerName)!.id}`);
+    await run(`UPDATE ${SCHEMA}.partner_services SET service_name = $1 WHERE id = $2`, [services[0], firstServiceId]);
+    for (const [i, s] of services.slice(1).entries()) {
+      await run(
+        `INSERT INTO ${SCHEMA}.partner_services (id, partner_id, service_name, commission_pct) VALUES ($1, $2, $3, 2.0)`,
+        [uuid(`pservice:${partnerName}-${i}`), pid, s],
+      );
+    }
   }
   for (const d of marketplaceDeals) {
     const partnerId = partnerIdByName.get(d.partner);
@@ -963,10 +1039,11 @@ async function main() {
   const rohanLeadId = uuid(`lead:${salesLeads.find((x) => x.name === "Rohan Mehta")!.id}`);
   const convoId = uuid("convo:sales-rohan");
   await run(
-    `INSERT INTO ${SCHEMA}.ai_conversations (id, agent_id, channel, lead_id, status, language, created_at)
-     VALUES ($1, $2, 'web', $3, 'active', 'en', now())`,
-    [convoId, salesAgentId, rohanLeadId],
+    `INSERT INTO ${SCHEMA}.ai_conversations (id, agent_id, channel, lead_id, customer_id, status, language, created_at)
+     VALUES ($1, $2, 'web', $3, $4, 'active', 'en', now())`,
+    [convoId, salesAgentId, rohanLeadId, portalCustomerId],
   );
+  await run(`UPDATE ${SCHEMA}.leads SET converted_customer = $1 WHERE id = $2`, [portalCustomerId, rohanLeadId]);
   for (const [i, m] of aiAgentChat.entries()) {
     await run(
       `INSERT INTO ${SCHEMA}.ai_messages (id, conversation_id, role, content, created_at)

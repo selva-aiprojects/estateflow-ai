@@ -18,8 +18,6 @@ import {
   Sparkles,
   ChevronDown,
   Zap,
-  Lock,
-  Rocket,
   PackageSearch,
   Scale,
   UserCog,
@@ -30,11 +28,13 @@ import {
   Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { Badge, Button, Card, IconButton } from "@/components/ui";
+import { IconButton } from "@/components/ui";
 import { useApiData } from "@/lib/api-client";
 import { TenantProvider, useTenant } from "@/lib/tenant-context";
 import { UserChip } from "@/components/user-chip";
 import type { Segment } from "@/lib/data";
+
+type NavGroupId = "management" | "sales" | "construction" | "finance" | "hrms" | "customer";
 
 interface NavItem {
   href: string;
@@ -42,34 +42,64 @@ interface NavItem {
   icon: React.ElementType;
   persona: string;
   segment?: Segment;
+  group: NavGroupId;
 }
 
-const navSections: { label: string; items: NavItem[] }[] = [
+const NAV_GROUPS: { id: NavGroupId; label: string }[] = [
+  { id: "management", label: "Management" },
+  { id: "sales", label: "Sales" },
+  { id: "construction", label: "Construction" },
+  { id: "finance", label: "Finance" },
+  { id: "hrms", label: "HRMS" },
+  { id: "customer", label: "Customer" },
+];
+
+const navGroups: { id: NavGroupId; items: NavItem[] }[] = [
   {
-    label: "Operations",
+    id: "management",
     items: [
-      { href: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard, persona: "management" },
-      { href: "/sales", label: "Sales Engine", icon: Users, persona: "sales" },
-      { href: "/inventory", label: "Inventory Heat Map", icon: Grid3x3, persona: "sales", segment: "apartments" },
-      { href: "/land", label: "Land Portfolio", icon: Map, persona: "sales", segment: "land" },
-      { href: "/leads", label: "Lead Pipeline", icon: Users, persona: "sales" },
-      { href: "/quotes", label: "Quotations & Approvals", icon: FileText, persona: "sales" },
-      { href: "/construction", label: "Construction & DPR", icon: HardHat, persona: "construction", segment: "apartments" },
-      { href: "/finance", label: "Finance & Collections", icon: Landmark, persona: "finance" },
-      { href: "/portal", label: "Customer Portal", icon: Home, persona: "customer" },
+      { href: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard, persona: "management", group: "management" },
+      { href: "/legal", label: "Legal & RERA", icon: Scale, persona: "management", group: "management" },
+      { href: "/ai", label: "AI Command Center", icon: Cpu, persona: "management", group: "management" },
     ],
   },
   {
-    label: "Enterprise Suite",
+    id: "sales",
     items: [
-      { href: "/procurement", label: "Procurement & Vendors", icon: PackageSearch, persona: "construction" },
-      { href: "/legal", label: "Legal & RERA", icon: Scale, persona: "management" },
-      { href: "/hr", label: "HR & Contract Labour", icon: UserCog, persona: "construction" },
-      { href: "/facility", label: "Facility & Society Ops", icon: Building2, persona: "customer" },
-      { href: "/rentals", label: "Rental Operations", icon: KeyRound, persona: "finance" },
-      { href: "/marketplace", label: "Marketplace", icon: Store, persona: "sales" },
-      { href: "/partners", label: "Channel Partners", icon: Handshake, persona: "sales" },
-      { href: "/ai", label: "AI Command Center", icon: Cpu, persona: "management" },
+      { href: "/sales", label: "Sales Engine", icon: Users, persona: "sales", group: "sales" },
+      { href: "/inventory", label: "Inventory Heat Map", icon: Grid3x3, persona: "sales", segment: "apartments", group: "sales" },
+      { href: "/land", label: "Land Portfolio", icon: Map, persona: "sales", segment: "land", group: "sales" },
+      { href: "/leads", label: "Lead Pipeline", icon: Users, persona: "sales", group: "sales" },
+      { href: "/quotes", label: "Quotations & Approvals", icon: FileText, persona: "sales", group: "sales" },
+      { href: "/marketplace", label: "Marketplace", icon: Store, persona: "sales", group: "sales" },
+      { href: "/partners", label: "Channel Partners", icon: Handshake, persona: "sales", group: "sales" },
+    ],
+  },
+  {
+    id: "construction",
+    items: [
+      { href: "/construction", label: "Construction & DPR", icon: HardHat, persona: "construction", segment: "apartments", group: "construction" },
+      { href: "/procurement", label: "Procurement & Vendors", icon: PackageSearch, persona: "construction", group: "construction" },
+    ],
+  },
+  {
+    id: "finance",
+    items: [
+      { href: "/finance", label: "Finance & Collections", icon: Landmark, persona: "finance", group: "finance" },
+      { href: "/rentals", label: "Rental Operations", icon: KeyRound, persona: "finance", group: "finance" },
+    ],
+  },
+  {
+    id: "hrms",
+    items: [
+      { href: "/hr", label: "HR & Contract Labour", icon: UserCog, persona: "construction", group: "hrms" },
+    ],
+  },
+  {
+    id: "customer",
+    items: [
+      { href: "/portal", label: "Customer Portal", icon: Home, persona: "customer", group: "customer" },
+      { href: "/facility", label: "Facility & Society Ops", icon: Building2, persona: "customer", group: "customer" },
     ],
   },
 ];
@@ -77,7 +107,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
 const personas = [
   { id: "management", label: "Management", role: "VP · Sales & Ops" },
   { id: "sales", label: "Sales", role: "Sales Executive" },
-  { id: "construction", label: "Construction", role: "Site Engineer", segment: "apartments" as Segment },
+  { id: "construction", label: "Construction", role: "Site Engineer" },
   { id: "finance", label: "Finance", role: "Accounts Lead" },
   { id: "customer", label: "Customer", role: "Unit / Plot Owner" },
 ];
@@ -92,20 +122,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { tenant, plan, tenants, has, setTenantId } = useTenant();
+  const { tenant, tenants, setTenantId } = useTenant();
   const [persona, setPersona] = useState("management");
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications] = useApiData<{ id: string; title: string; body: string; time: string; tone: string }[]>("/api/notifications");
 
-  const allItems = navSections.flatMap((s) => s.items);
-  const visibleItems = allItems.filter(
-    (item) => (item.persona === persona || persona === "management") && (!item.segment || has(item.segment)),
-  );
+  const allItems = navGroups.flatMap((g) => g.items);
+  const visibleItems = allItems.filter((item) => item.persona === persona || persona === "management");
 
-  const currentItem = allItems.find((i) => pathname === i.href);
-  const locked = Boolean(currentItem?.segment && !has(currentItem.segment));
-
-  const visiblePersonas = personas.filter((p) => !p.segment || has(p.segment));
+  const visiblePersonas = personas;
 
   return (
     <div className="flex min-h-screen">
@@ -123,7 +148,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
         <div className="px-3 pt-4">
           <label className="block">
-            <span className="mb-1 block px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">Tenant · subscription</span>
+            <span className="mb-1 block px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">Tenant</span>
             <div className="relative">
               <select
                 value={tenant.id}
@@ -139,12 +164,6 @@ function ShellInner({ children }: { children: React.ReactNode }) {
               <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50" />
             </div>
           </label>
-          <div className="mt-1.5 flex items-center gap-2 px-1">
-            <Badge tone={plan.segments.length === 2 ? "primary" : plan.segments[0] === "land" ? "success" : "info"} className="text-[10px]">
-              {plan.code} plan
-            </Badge>
-            <span className="truncate text-[10px] text-white/40">{plan.price}</span>
-          </div>
         </div>
 
         <div className="px-3 pt-3">
@@ -169,14 +188,15 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="mt-4 flex-1 overflow-y-auto px-3 pb-4">
-          {navSections.map((section) => {
-            const sectionItems = section.items.filter((item) => visibleItems.includes(item));
-            if (sectionItems.length === 0) return null;
+          {navGroups.map((group) => {
+            const groupItems = group.items.filter((item) => visibleItems.includes(item));
+            if (groupItems.length === 0) return null;
+            const groupLabel = NAV_GROUPS.find((g) => g.id === group.id)?.label ?? group.id;
             return (
-              <div key={section.label}>
-                <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">{section.label}</p>
+              <div key={group.id}>
+                <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">{groupLabel}</p>
                 <ul className="space-y-1">
-                  {sectionItems.map((item) => {
+                  {groupItems.map((item) => {
                     const active = pathname === item.href;
                     return (
                       <li key={item.href}>
@@ -267,18 +287,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 px-6 py-6">
-          {locked ? (
-            <PlanLocked planName={plan.name} onPreview={() => setTenantId("builder-a")} />
-          ) : (
-            children
-          )}
-        </main>
+        <main className="flex-1 px-6 py-6">{children}</main>
 
         <footer className="border-t border-border px-6 py-4">
           <div className="flex flex-col gap-1 text-[11px] text-text-subtle sm:flex-row sm:items-center sm:justify-between">
             <span>
-              EstateFlow · {tenant.name} · {plan.name} plan · Data resides in AWS {tenant.region} (DPDP 2023)
+              EstateFlow · {tenant.name} · Data resides in AWS {tenant.region} (DPDP 2023)
             </span>
             <span className="flex items-center gap-1.5">
               <Zap size={11} /> First token &lt; 1.5s · p95 API &lt; 200ms
@@ -287,26 +301,5 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         </footer>
       </div>
     </div>
-  );
-}
-
-function PlanLocked({ planName, onPreview }: { planName: string; onPreview: () => void }) {
-  return (
-    <Card className="mx-auto mt-8 flex max-w-xl flex-col items-center p-10 text-center animate-fade-in">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary">
-        <Lock size={24} />
-      </div>
-      <h1 className="mt-4 text-lg font-semibold text-text">Not part of your subscription</h1>
-      <p className="mt-2 max-w-sm text-sm leading-relaxed text-text-muted">
-        This module is not included in the <b className="text-text">{planName}</b> plan. Upgrade to{" "}
-        <b className="text-text">Land + Homes</b> to unlock the complete real estate operating system for this tenant.
-      </p>
-      <Button className="mt-6" onClick={onPreview}>
-        <Rocket size={15} /> Preview Land + Homes plan
-      </Button>
-      <p className="mt-3 text-[11px] text-text-subtle">
-        In production this routes to your billing flow — here it switches to the enterprise demo tenant.
-      </p>
-    </Card>
   );
 }

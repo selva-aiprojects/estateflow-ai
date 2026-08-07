@@ -40,7 +40,7 @@ interface DashboardPayload {
 }
 
 export function DashboardView() {
-  const { tenant, plan, has } = useTenant();
+  const { tenant, has } = useTenant();
   const [dashboard] = useApiData<DashboardPayload>("/api/dashboard");
 
   if (!dashboard) return <PageSkeleton />;
@@ -73,7 +73,7 @@ export function DashboardView() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title="Executive Dashboard"
-        subtitle={`${tenant.name} · ${plan.name} plan — live as of 05 Aug 2026, 09:30 IST`}
+        subtitle={`${tenant.name} — live as of 05 Aug 2026, 09:30 IST`}
         action={
           <Badge tone="success">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
