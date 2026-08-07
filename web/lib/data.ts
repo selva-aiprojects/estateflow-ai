@@ -1122,6 +1122,94 @@ export const unitAmenities: UnitAmenity[] = [
   { kind: "concierge", name: "Concierge Desk", detail: "Lobby · Tower 1" },
 ];
 
+// =============================================================================
+// CUSTOMER PORTAL · UPDATES / TICKETS / POSSESSION / REFERRALS
+// =============================================================================
+
+export interface PortalUpdate {
+  date: string;
+  tower: string;
+  progress: number;
+  note: string;
+  engineer: string;
+}
+
+export const portalUpdates: PortalUpdate[] = [
+  { date: "2026-08-05", tower: "T1", progress: 68.4, note: "Level 5 slab shutter work in progress. 2 days ahead of schedule.", engineer: "Ravi Kumar" },
+  { date: "2026-08-04", tower: "T1", progress: 67.9, note: "Steel fixing for slab completed on east wing.", engineer: "Ravi Kumar" },
+  { date: "2026-08-03", tower: "T1", progress: 67.4, note: "Level 4 slab cast completed. Photos uploaded to project album.", engineer: "Ravi Kumar" },
+  { date: "2026-08-02", tower: "T1", progress: 66.8, note: "Blockwork Level 4 progressed; lift shaft steel erected.", engineer: "Ravi Kumar" },
+];
+
+export interface PortalTicket {
+  id: string;
+  no: string;
+  category: string;
+  subject: string;
+  priority: "low" | "medium" | "high" | "urgent";
+  status: "open" | "assigned" | "in_progress" | "on_hold" | "resolved" | "closed";
+  ageDays: number;
+}
+
+export const portalTickets: PortalTicket[] = [
+  { id: "pt1", no: "TK-2026-118", category: "Plumbing", subject: "Leak in master bathroom washbasin", priority: "high", status: "in_progress", ageDays: 2 },
+  { id: "pt2", no: "TK-2026-119", category: "Snagging", subject: "Paint touch-up near balcony door frame", priority: "medium", status: "open", ageDays: 1 },
+];
+
+export interface PortalPossessionStep {
+  name: string;
+  status: "done" | "scheduled" | "pending";
+  date?: string;
+}
+
+export const portalPossessionSteps: PortalPossessionStep[] = [
+  { name: "Structure completion & snag inspection", status: "done", date: "05 Aug 2026" },
+  { name: "RERA registration of your unit", status: "done", date: "28 Jul 2026" },
+  { name: "Occupancy NOC & fire safety certificate", status: "scheduled", date: "12 Sep 2026" },
+  { name: "Final walkthrough & snag resolution", status: "pending" },
+  { name: "Key handover & welcome kit", status: "pending" },
+];
+
+export interface PortalSnag {
+  id: string;
+  no: string;
+  title: string;
+  category: string;
+  status: "open" | "in_progress" | "resolved";
+  raised: string;
+}
+
+export const portalSnags: PortalSnag[] = [
+  { id: "snag1", no: "SNG-026", title: "Balcony door frame paint touch-up", category: "Painting", status: "open", raised: "01 Aug 2026" },
+  { id: "snag2", no: "SNG-018", title: "Bedroom 2 electrical switchplate loose", category: "Electrical", status: "in_progress", raised: "28 Jul 2026" },
+];
+
+export interface PortalReferral {
+  id: string;
+  name: string;
+  phone: string;
+  status: "visited" | "booked" | "converted";
+  reward: number;
+}
+
+export interface PortalReferralProgram {
+  code: string;
+  reward: number;
+  earned: number;
+  referred: PortalReferral[];
+}
+
+export const portalReferralProgram: PortalReferralProgram = {
+  code: "RMH-2026",
+  reward: 50000,
+  earned: 50000,
+  referred: [
+    { id: "ref1", name: "Farhan Ali", phone: "+91 98190 22334", status: "booked", reward: 0 },
+    { id: "ref2", name: "Ananya Iyer", phone: "+91 98400 33445", status: "visited", reward: 0 },
+    { id: "ref3", name: "Sneha Kulkarni", phone: "+91 90080 66778", status: "converted", reward: 50000 },
+  ],
+};
+
 export const salesLeads: SalesLead[] = [
   { id: "SL-1188", name: "Rohan Mehta", phone: "+91 98450 11223", source: "facebook", project: "Elevate Residences", unitType: "3BHK", budget: 14000000, score: 92, stage: "offer", assigned: "Arjun Nair", segment: "apartments", createdAt: "2026-08-05T09:12:00" },
   { id: "SL-1187", name: "Priya Sharma", phone: "+91 98110 44556", source: "google_ads", project: "Elevate Residences", unitType: "2BHK", budget: 9800000, score: 84, stage: "visit_scheduled", assigned: "Neha Gupta", segment: "apartments", createdAt: "2026-08-05T08:40:00" },

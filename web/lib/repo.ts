@@ -55,6 +55,17 @@ import {
   type AmenityKind,
   type UnitAmenity,
   unitAmenities,
+  type PortalUpdate,
+  type PortalTicket,
+  type PortalPossessionStep,
+  type PortalSnag,
+  type PortalReferral,
+  type PortalReferralProgram,
+  portalUpdates,
+  portalTickets,
+  portalPossessionSteps,
+  portalSnags,
+  portalReferralProgram,
 } from "@/lib/data";
 
 type DbRow = Record<string, unknown>;
@@ -960,6 +971,122 @@ export interface PortalPayload {
   instalments: { id: string; name: string; due: string; amount: number; paid: boolean; paidOn: string }[];
   docs: { name: string; tag: string }[];
   amenities: UnitAmenity[];
+  ledger: {
+    total: number;
+    paid: number;
+    due: number;
+    paidPct: number;
+    receipts: { no: string; date: string; desc: string; amount: number; mode: string }[];
+  };
+  updates: PortalUpdate[];
+  tickets: PortalTicket[];
+  possession: { steps: PortalPossessionStep[]; snags: PortalSnag[]; possessionDate: string };
+  referrals: PortalReferralProgram;
+}
+
+export interface PortalTicketInput {
+  category: string;
+  priority: string;
+  subject: string;
+  description?: string;
+}
+
+async function fetchPortalCustomer(): Promise<{ customerId: string; unitId: string; projectId: string }> {
+  const row = await qOne<DbRow>(`
+    SELECT bk.customer_id, bk.unit_id, u.block_id, f.tower_id
+    FROM bookings bk
+    JOIN units u ON u.id = bk.unit_id
+    JOIN blocks bl ON bl.id = u.block_id
+    JOIN floors f ON f.id = bl.floor_id
+    ORDER BY bk.created_at
+    LIMIT 1`);
+  const unitId = row ? str(row.unit_id) : "";
+  return {
+    customerId: row ? str(row.customer_id) : "",
+    unitId,
+    projectId: row ? str(row.tower_id) : "",
+  };
+}
+
+async function fetchPortalUpdates(): Promise<PortalUpdate[]> {
+  const rows = await q<DbRow>(`
+    SELECT d.report_date, d.progress_pct, d.summary, t.code AS tower, u.display_name AS engineer
+    FROM dprs d
+    JOIN towers t ON t.id = d.tower_id
+    LEFT JOIN users u ON u.id = d.site_engineer
+    ORDER BY d.report_date DESC, t.code
+    LIMIT 8`);
+  if (!rows.length) return portalUpdates;
+  return rows.map((r) => ({
+    date: dateStr(r.report_date),
+    tower: str(r.tower),
+    progress: num(r.progress_pct),
+    note: str(r.summary),
+    engineer: str(r.engineer),
+  }));
+}
+
+async function fetchPortalTickets(customerId: string): Promise<PortalTicket[]> {
+  const rows = await q<DbRow>(
+    `SELECT id, ticket_no, category, subject, priority, status, opened_at
+     FROM tickets WHERE customer_id = $1 ORDER BY opened_at DESC LIMIT 10`,
+    [customerId],
+  );
+  if (!rows.length) return portalTickets;
+  return rows.map((r) => ({
+    id: str(r.id),
+    no: str(r.ticket_no),
+    category: str(r.category),
+    subject: str(r.subject) || str(r.category),
+    priority: str(r.priority) as PortalTicket["priority"],
+    status: str(r.status) as PortalTicket["status"],
+    ageDays: Math.max(0, Math.round((Date.now() - new Date(str(r.opened_at)).getTime()) / 86400_000)),
+  }));
+}
+
+async function fetchPortalSnags(customerId: string): Promise<PortalSnag[]> {
+  const rows = await q<DbRow>(
+    `SELECT id, ticket_no, category, subject, status, opened_at
+     FROM tickets WHERE customer_id = $1 AND category ILIKE '%snag%'
+     ORDER BY opened_at DESC LIMIT 10`,
+    [customerId],
+  );
+  if (!rows.length) return portalSnags;
+  return rows.map((r) => ({
+    id: str(r.id),
+    no: str(r.ticket_no),
+    title: str(r.subject) || str(r.category),
+    category: str(r.category),
+    status: (str(r.status) === "in_progress" ? "in_progress" : str(r.status) === "resolved" ? "resolved" : "open") as PortalSnag["status"],
+    raised: dateStr(r.opened_at),
+  }));
+}
+
+async function fetchPortalReferrals(): Promise<PortalReferralProgram> {
+  const code = "RMH-2026";
+  const rows = await q<DbRow>(
+    `SELECT name, phone, status FROM leads
+     WHERE source_payload->>'referral_code' = $1 ORDER BY created_at DESC`,
+    [code],
+  );
+  if (!rows.length) return portalReferralProgram;
+  const statusToPhase: Record<string, PortalReferral["status"]> = {
+    site_visit_scheduled: "visited", visit_scheduled: "visited", site_visit: "visited",
+    booking_initiated: "booked", offer: "booked", won: "converted", booked: "booked",
+  };
+  const referred = rows.map((r, i) => ({
+    id: `ref-${i}`,
+    name: str(r.name),
+    phone: str(r.phone),
+    status: (statusToPhase[str(r.status)] ?? "visited") as PortalReferral["status"],
+    reward: str(r.status) === "won" ? portalReferralProgram.reward : 0,
+  }));
+  return {
+    code,
+    reward: portalReferralProgram.reward,
+    earned: referred.reduce((sum, r) => sum + r.reward, 0),
+    referred,
+  };
 }
 
 export async function getPortal(): Promise<PortalPayload> {
@@ -1022,7 +1149,73 @@ export async function getPortal(): Promise<PortalPayload> {
       })
     : unitAmenities;
 
-  return { milestones, unit, instalments, docs, amenities };
+  const paid = instalments.filter((i) => i.paid).reduce((s, i) => s + i.amount, 0);
+  const ledger = {
+    total: unit.price,
+    paid,
+    due: unit.price - paid,
+    paidPct: unit.price ? Math.round((paid / unit.price) * 100) : 0,
+    receipts: instalments.filter((i) => i.paid).map((i, idx) => ({
+      no: `RCPT-2026-${String(101 + idx).padStart(3, "0")}`,
+      date: i.paidOn,
+      desc: `${i.name} · ${unit.no}`,
+      amount: i.amount,
+      mode: "UPI",
+    })),
+  };
+
+  const [updates, customer, referrals] = await Promise.all([
+    fetchPortalUpdates(),
+    fetchPortalCustomer(),
+    fetchPortalReferrals(),
+  ]);
+  const [tickets, snags] = await Promise.all([
+    fetchPortalTickets(customer.customerId),
+    fetchPortalSnags(customer.customerId),
+  ]);
+
+  const possession = {
+    steps: portalPossessionSteps,
+    snags,
+    possessionDate: "Jan 2028",
+  };
+
+  return { milestones, unit, instalments, docs, amenities, ledger, updates, tickets, possession, referrals };
+}
+
+export async function createPortalTicket(input: PortalTicketInput): Promise<PortalTicket> {
+  try {
+    const customer = await fetchPortalCustomer();
+    const count = (await qVal<number>(`SELECT count(*)::int AS v FROM tickets`)) ?? 0;
+    const no = `TK-2026-${String(count + 1).padStart(3, "0")}`;
+    const id = randomUUID();
+    const openedAt = new Date().toISOString();
+    await q(
+      `INSERT INTO tickets (id, ticket_no, customer_id, project_id, unit_id, category, priority, status, subject, description, opened_at, channel)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, 'portal')`,
+      [id, no, customer.customerId || null, customer.projectId || null, customer.unitId || null,
+       input.category, input.priority, input.subject, input.description ?? null, openedAt],
+    );
+    return {
+      id,
+      no,
+      category: input.category,
+      subject: input.subject,
+      priority: input.priority as PortalTicket["priority"],
+      status: "open",
+      ageDays: 0,
+    };
+  } catch {
+    return {
+      id: randomUUID(),
+      no: `TK-2026-DEMO`,
+      category: input.category,
+      subject: input.subject,
+      priority: input.priority as PortalTicket["priority"],
+      status: "open",
+      ageDays: 0,
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------

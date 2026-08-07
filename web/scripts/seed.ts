@@ -472,6 +472,45 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------------
+  // 8c. PORTAL: RECEIPT + SUPPORT TICKETS + REFERRALS
+  // ---------------------------------------------------------------------------
+  await run(
+    `INSERT INTO ${SCHEMA}.receipts (id, receipt_no, customer_id, booking_id, amount, payment_mode, reference, received_at, received_by, posted)
+     VALUES ($1, $2, $3, $4, 200000, 'upi', 'UPI/RMH-0812', '2026-08-12', $5, true)`,
+    [uuid("receipt:portal-booking"), "RCPT-2026-0812", portalCustomerId, bookingId, userUuid("Arjun Nair")],
+  );
+  const portalSnagsSeed: { id: string; no: string; subject: string; priority: string; status: string; ageDays: number }[] = [
+    { id: "snag1", no: "TK-2026-119", subject: "Paint touch-up near balcony door frame", priority: "medium", status: "open", ageDays: 1 },
+    { id: "snag2", no: "TK-2026-120", subject: "Bedroom 2 electrical switchplate loose", priority: "low", status: "in_progress", ageDays: 3 },
+  ];
+  for (const s of portalSnagsSeed) {
+    await run(
+      `INSERT INTO ${SCHEMA}.tickets (id, ticket_no, customer_id, unit_id, category, priority, status, subject, opened_at, channel)
+       VALUES ($1, $2, $3, $4, 'Snagging', $5, $6, $7, $8, 'portal')`,
+      [uuid(`ticket:${s.id}`), s.no, portalCustomerId, portalUnitId, s.priority, s.status, s.subject,
+       new Date(Date.now() - s.ageDays * 86400_000).toISOString()],
+    );
+  }
+  const referralCode = "RMH-2026";
+  const referralLeadsSeed: { name: string; phone: string; status: string; stage: string; budget: number }[] = [
+    { name: "Neha Krishnan", phone: "+91 97401 56780", status: "won", stage: "won", budget: 13400000 },
+    { name: "Arvind Rao", phone: "+91 90080 11223", status: "booking_initiated", stage: "booked", budget: 14200000 },
+    { name: "Pooja Nair", phone: "+91 98801 44556", status: "site_visit_scheduled", stage: "visit_scheduled", budget: 9600000 },
+  ];
+  for (const [i, l] of referralLeadsSeed.entries()) {
+    await run(
+      `INSERT INTO ${SCHEMA}.leads
+        (id, lead_source_id, status, sales_stage, name, phone, budget_min, budget_max,
+         project_interest, unit_type_interest, score, score_reason, assigned_to, source_payload, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())`,
+      [uuid(`lead:referral-${i + 1}`), sourceUuid("referral"), l.status, l.stage, l.name, l.phone, l.budget, l.budget,
+       projectIdByName("Elevate Residences"), "3BHK", 74, JSON.stringify({ source: "referral", note: "Referred by existing owner" }), userUuid("Arjun Nair"),
+       JSON.stringify({ segment: "apartments", source: "referral", isLand: false, referral_code: referralCode })],
+    );
+  }
+  console.log("[8c] portal receipts / snag tickets / referrals seeded");
+
+  // ---------------------------------------------------------------------------
   // 9. CONSTRUCTION: MILESTONES + DPRs
   // ---------------------------------------------------------------------------
   const elevateId = projectUuidByCode.get("ELEVATE")!;
