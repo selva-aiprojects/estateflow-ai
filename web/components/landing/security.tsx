@@ -3,8 +3,8 @@ import { Layers, MapPin, KeyRound, ShieldCheck, FileCheck2, Activity } from "luc
 const items = [
   {
     icon: Layers,
-    title: "Tenant isolation",
-    copy: "Every builder runs on an isolated PostgreSQL schema with dedicated vector storage — no cross-tenant leakage by design.",
+    title: "Data isolation",
+    copy: "Your organisation runs in its own isolated database with dedicated vector storage — your data is never shared or exposed to any other business on the platform.",
   },
   {
     icon: MapPin,
@@ -14,7 +14,7 @@ const items = [
   {
     icon: KeyRound,
     title: "Encryption",
-    copy: "AES-256 at rest with tenant-specific KMS keys, and TLS 1.3 for every request in transit.",
+    copy: "AES-256 at rest with dedicated KMS keys per organisation, and TLS 1.3 for every request in transit.",
   },
   {
     icon: ShieldCheck,

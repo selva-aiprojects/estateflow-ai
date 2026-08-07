@@ -10,8 +10,11 @@ import {
   Home,
   Handshake,
   ClipboardCheck,
-  Server,
-  Send,
+  Cpu,
+  CheckCircle2,
+  Sparkles,
+  Store,
+  Map,
 } from "lucide-react";
 
 const matrix = [
@@ -71,15 +74,15 @@ const modules = [
     visual: <FinanceVisual />,
   },
   {
-    kicker: "Provisioning & control plane",
-    title: "Workspaces on demand, email built in",
-    copy: "A Nexus Admin spins up an isolated workspace — schema, data and admin login — in one click. Each tenant runs on its own PostgreSQL schema, and EstateFlow&apos;s own Resend mailer delivers the welcome kit, password resets and payment-reminder emails from a shared, audited outbox.",
+    kicker: "Integrated marketplace",
+    title: "AI-matched partners, commission-led revenue",
+    copy: "Verified home-loan, interiors, legal, insurance and moving partners are onboarded once and recommended to the right leads by the AI match engine. Commissions are auto-ledgered the moment a deal converts.",
     points: [
-      "One-click tenant provisioning — isolated schema + admin user",
-      "Welcome kit & password resets via a shared email outbox",
-      "Payment-reminder emails queued automatically from overdue invoices",
+      "KYC + GST-verified partner directory",
+      "AI match engine pairs leads with the right partner",
+      "Commission auto-ledgered on conversion",
     ],
-    visual: <ControlPlaneVisual />,
+    visual: <MarketplaceVisual />,
   },
 ];
 
@@ -191,48 +194,45 @@ function FinanceVisual() {
   );
 }
 
-function ControlPlaneVisual() {
-  const tenants = [
-    { code: "BA", name: "Builder A Homes", state: "active" },
-    { code: "GA", name: "Green Acre Estates", state: "active" },
-    { code: "AH", name: "Aarav Heights", state: "active" },
-    { code: "EME", name: "Emerald Towers", state: "active" },
+function MarketplaceVisual() {
+  const partners = [
+    { code: "AX", name: "Axis Bank — Home Loans", score: 96, tag: "Home Loan", tone: "bg-primary-soft text-primary" },
+    { code: "LV", name: "Livspace Studio", score: 91, tag: "Interiors", tone: "bg-info-soft text-info" },
+    { code: "LD", name: "LegitDocs Legal", score: 88, tag: "Legal / Doc", tone: "bg-warning-soft text-warning" },
   ] as const;
   return (
     <div className="rounded-lg border border-border bg-surface p-5 shadow-card">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-text">Nexus Admin console</p>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-text-muted">
-          <Server size={11} aria-hidden />
-          Superadmin
+        <p className="text-sm font-semibold text-text">AI match engine</p>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-success/20 bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success">
+          <BadgeCheck size={12} aria-hidden />
+          KYC + GST verified
         </span>
       </div>
       <ul className="mt-4 space-y-2">
-        {tenants.map((t) => (
-          <li key={t.code} className="flex items-center justify-between rounded-md border border-border bg-surface-muted/40 px-3 py-2">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-6 w-6 items-center justify-center rounded bg-surface-muted font-mono text-[10px] font-semibold text-text-subtle">{t.code}</span>
-              <span className="text-xs font-medium text-text">{t.name}</span>
-            </div>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-              Active
+        {partners.map((p) => (
+          <li key={p.code} className="flex items-center gap-2.5 rounded-md border border-border bg-surface-muted/40 px-3 py-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-surface-muted font-mono text-[10px] font-semibold text-text-subtle">{p.code}</span>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-text">{p.name}</span>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${p.tone}`}>{p.tag}</span>
+            <span className="flex items-center gap-1 text-[11px] font-medium tabular-nums text-success">
+              <Sparkles size={11} aria-hidden />
+              {p.score}%
             </span>
           </li>
         ))}
       </ul>
       <div className="mt-4 space-y-2">
         {[
-          { label: "Welcome kit → admin@emerald.in", state: "sent" },
-          { label: "Password reset → admin@emerald.in", state: "sent" },
-          { label: "Payment reminder → RINV-2026-064 · ₹72,000", state: "sent" },
+          { label: "Commission — Axis · proposal", value: "₹1,20,000", state: "Due" },
+          { label: "Commission — Livspace · converted", value: "₹45,000", state: "Ledgered" },
         ].map((row) => (
           <div key={row.label} className="flex items-center gap-2 rounded-md border border-teal/20 bg-teal-soft px-3 py-2">
-            <Send size={13} className="text-teal" aria-hidden />
+            <Store size={13} className="shrink-0 text-teal" aria-hidden />
             <p className="flex-1 truncate text-xs text-teal">{row.label}</p>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-teal">
-              <BadgeCheck size={12} aria-hidden />
-              {row.state}
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium tabular-nums text-teal">
+              <CheckCircle2 size={12} aria-hidden />
+              {row.value} · {row.state}
             </span>
           </div>
         ))}
@@ -247,10 +247,10 @@ const moreModules = [
   { icon: ClipboardCheck, label: "Rentals & leases" },
   { icon: Warehouse, label: "Facility & societies" },
   { icon: Users, label: "HR & contract labour" },
-  { icon: Handshake, label: "Vendor marketplace" },
+  { icon: Handshake, label: "Channel partners" },
   { icon: Truck, label: "Broker & channel" },
-  { icon: Server, label: "Nexus Admin console" },
-  { icon: Send, label: "Email outbox" },
+  { icon: Cpu, label: "AI Command Center" },
+  { icon: Map, label: "Land portfolio" },
 ];
 
 export function Platform() {
@@ -265,7 +265,7 @@ export function Platform() {
           <p className="mt-4 text-base leading-relaxed text-text-muted">
             Every module writes to the same database — so a discount approved in
             sales, a DPR logged on site and a payment reconciled in finance are
-            the same moment, seen by every stakeholder.
+            the same moment, seen by every stakeholder in your organisation.
           </p>
         </div>
 

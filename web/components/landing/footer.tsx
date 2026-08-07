@@ -19,7 +19,7 @@ const agentLinks = [
 
 const companyLinks = [
   { label: "Launch the app", href: "/dashboard" },
-  { label: "Security & tenancy", href: "#security" },
+  { label: "Security & data isolation", href: "#security" },
   { label: "Book a demo", href: "mailto:sales@estateflow.in?subject=Book%20a%20demo" },
   { label: "Contact", href: "mailto:hello@estateflow.in" },
 ];
@@ -38,8 +38,8 @@ export function Footer() {
               className="h-8 w-auto"
             />
             <p className="mt-5 max-w-xs text-sm leading-relaxed text-white/60">
-              India&apos;s first AI-powered, multi-tenant end-to-end real estate
-              operating system — built by Cognivectra.
+              India&apos;s first AI-powered end-to-end real estate operating
+              system — built by Cognivectra.
             </p>
             <p className="mt-6 flex items-center gap-2 text-xs text-white/45">
               <ShieldCheck size={14} aria-hidden />

@@ -60,7 +60,7 @@ export function Hero() {
         <div className="lg:col-span-7">
           <span className="inline-flex items-center gap-2 rounded-full border border-hero-border bg-white/5 px-3 py-1 text-xs font-medium text-white/80">
             <span className="h-1.5 w-1.5 rounded-full bg-teal" aria-hidden />
-            India&apos;s first multi-tenant AI Real Estate OS
+            India&apos;s first AI-powered Real Estate OS
           </span>
 
           <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">

@@ -19,9 +19,9 @@ export function Cta() {
               Bring your next tower live on EstateFlow
             </h2>
             <p className="mt-4 text-base leading-relaxed text-white/70">
-              Browse demo workspaces, switch between tenants, and provision
-              your own workspace from the Nexus Admin console — inventory,
-              agents and collections on one screen.
+              Your inventory, leads, construction, finance and customer
+              communication — all on one secure platform. Get your project
+              live on EstateFlow and see the entire business on a single screen.
             </p>
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
               <Link

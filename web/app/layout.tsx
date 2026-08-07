@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "EstateFlow — AI Real Estate OS",
-  description: "India's first AI-powered, multi-tenant End-to-End Real Estate Operating System.",
+  description: "India's first AI-powered End-to-End Real Estate Operating System.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

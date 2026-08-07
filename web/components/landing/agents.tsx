@@ -52,7 +52,7 @@ const agents = [
     title: "AI Customer Agent",
     summary:
       "Handles every buyer on WhatsApp — and follows up payment reminders by email.",
-    points: ["Payment-schedule answers & reminders", "Receipts, e-sign links & photo updates", "Overdue-invoice reminder emails via a shared outbox"],
+    points: ["Payment-schedule answers & reminders", "Receipts, e-sign links & photo updates", "Overdue-invoice reminder emails via the platform's outbox"],
     tools: "WhatsApp Business · Resend emails",
   },
 ];
@@ -67,12 +67,12 @@ export function Agents() {
             A dedicated AI agent for every function
           </h2>
           <p className="mt-4 text-base leading-relaxed text-text-muted">
-            Six specialised agents — coordinated on LangGraph — share one
+            Six specialised agents — coordinated on LangGraph — act on one
             transactional database, so decisions made on the sales floor are
             instantly visible to finance, construction and legal. Every agent
-            runs inside its workspace, scoped to a single tenant&apos;s schema,
-            with email actions (welcome kit, resets, payment reminders) flowing
-            through EstateFlow&apos;s own Resend-backed outbox.
+            is scoped to your organisation&apos;s own data, with email actions
+            (welcome kit, resets, payment reminders) flowing through
+            EstateFlow&apos;s Resend-backed outbox.
           </p>
         </div>
 
