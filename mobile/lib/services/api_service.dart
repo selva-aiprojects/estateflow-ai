@@ -10,6 +10,8 @@ class ApiService {
 
   final ApiClient _client;
 
+  String get baseUrl => _client.baseUrl;
+
   // ── Auth ────────────────────────────────────────────────────────────────
 
   Future<AuthUser> login(String email, String password) async {

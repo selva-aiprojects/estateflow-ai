@@ -3,7 +3,7 @@ class AppConfig {
 
   static const String apiBase = String.fromEnvironment(
     'API_BASE',
-    defaultValue: 'http://10.0.2.2:3000',
+    defaultValue: 'https://estateflow.cybelinx.com',
   );
 
   static const String appName = 'EstateFlow';

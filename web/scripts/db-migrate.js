@@ -38,6 +38,16 @@ const ALTERS = [
   `ALTER TABLE ${SCHEMA}.customers ADD COLUMN IF NOT EXISTS loyalty_points int NOT NULL DEFAULT 0`,
   `ALTER TABLE ${SCHEMA}.customers ADD COLUMN IF NOT EXISTS loyalty_tier varchar(20) NOT NULL DEFAULT 'member'
       CHECK (loyalty_tier IN ('member','silver','gold','platinum'))`,
+  `ALTER TABLE ${SCHEMA}.units ADD COLUMN IF NOT EXISTS furnishing varchar(30)
+      CHECK (furnishing IN ('unfurnished','semi_furnished','fully_furnished'))`,
+  `ALTER TABLE ${SCHEMA}.units ADD COLUMN IF NOT EXISTS features text[]`,
+  `ALTER TABLE ${SCHEMA}.units ADD COLUMN IF NOT EXISTS plan_image_url text`,
+  `ALTER TABLE ${SCHEMA}.units DROP CONSTRAINT IF EXISTS units_unit_type_check`,
+  `ALTER TABLE ${SCHEMA}.units ADD CONSTRAINT units_unit_type_check CHECK (unit_type IN ('1BHK','2BHK','3BHK','4BHK','5BHK','penthouse','office','retail','plot','villa','independent_house','studio','other'))`,
+  `ALTER TABLE ${SCHEMA}.land_parcels ADD COLUMN IF NOT EXISTS facing varchar(40)`,
+  `ALTER TABLE ${SCHEMA}.land_parcels ADD COLUMN IF NOT EXISTS provisions text[]`,
+  `ALTER TABLE ${SCHEMA}.plots ADD COLUMN IF NOT EXISTS facing varchar(40)`,
+  `ALTER TABLE ${SCHEMA}.plots ADD COLUMN IF NOT EXISTS features text[]`,
 ];
 
 const TABLES = [

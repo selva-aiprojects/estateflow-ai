@@ -94,7 +94,7 @@ type Receipt = { no: string; date: string; desc: string; amount: number; mode: s
 
 interface PortalPayload {
   milestones: Milestone[];
-  unit: { no: string; project: string; type: string; sqft: number; floor: string; price: number };
+  unit: { no: string; project: string; type: string; sqft: number; floor: string; price: number; facing?: string; furnishing?: string; features?: string[]; planImageUrl?: string };
   instalments: Instalment[];
   docs: { name: string; tag: string }[];
   amenities: UnitAmenity[];
@@ -592,14 +592,22 @@ export function PortalView() {
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader title="Your Home" subtitle={unit.no} action={<Badge tone="primary">Booked</Badge>} />
-              <div className="flex aspect-[16/7] items-center justify-center rounded-lg bg-sidebar text-white/30">
-                <Home size={40} />
+              <div className="flex aspect-[16/7] items-center justify-center overflow-hidden rounded-lg bg-surface-muted">
+                {unit.planImageUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={unit.planImageUrl} alt={`Floor plan for ${unit.no}`} className="h-full w-full object-contain" loading="lazy" />
+                ) : (
+                  <Home size={40} className="text-text-subtle" />
+                )}
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
                 {[
                   ["Project", unit.project],
-                  ["Configuration", `${unit.type} · ${unit.sqft} sq.ft`],
+                  ["Configuration", `${unit.type.replaceAll("_", " ")} · ${unit.sqft} sq.ft`],
                   ["Location", unit.floor],
+                  ["Facing", unit.facing || "—"],
+                  ["Furnishing", unit.furnishing ? unit.furnishing.replaceAll("_", " ") : "—"],
+                  ["Base Price", inr(unit.price, 0)],
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-md bg-surface-muted/60 p-3">
                     <p className="text-[11px] text-text-muted">{k}</p>
@@ -607,6 +615,15 @@ export function PortalView() {
                   </div>
                 ))}
               </div>
+              {unit.features?.length ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {unit.features.map((f) => (
+                    <span key={f} className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-text-muted">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div className="mt-3 flex items-center justify-between rounded-md border border-border p-3">
                 <div>
                   <p className="text-[11px] text-text-muted">Total consideration</p>

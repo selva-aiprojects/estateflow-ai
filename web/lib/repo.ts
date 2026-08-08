@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { q, qOne, qVal } from "@/lib/db";
+import { q, qOne, qVal, tx } from "@/lib/db";
 import {
   PLANS,
   computeLandSummary,
@@ -101,6 +101,8 @@ const num = (v: unknown): number => {
 const str = (v: unknown): string => (v == null ? "" : String(v));
 
 const bool = (v: unknown): boolean => v === true || v === "true" || v === 1;
+
+const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : []);
 
 const dateStr = (v: unknown): string => (v == null || v === "" ? "" : new Date(v as string).toISOString().slice(0, 10));
 
@@ -319,6 +321,7 @@ const UNIT_JOIN = `
 
 const UNIT_SELECT = `
   SELECT u.id AS unit_id, u.unit_no, u.unit_type, u.carpet_area_sqft, u.bsp_price, u.status,
+         u.facing, u.furnishing, u.features, u.plan_image_url,
          t.code AS tower_code, t.name AS tower_name, f.floor_no, b.code AS block_code,
          pr.id AS project_id, pr.code AS project_code, pr.name AS project_name, pr.location AS project_location`;
 
@@ -331,6 +334,10 @@ const mapUnitRow = (r: DbRow): Unit => ({
   sqft: num(r.carpet_area_sqft),
   price: num(r.bsp_price),
   status: str(r.status) as UnitStatus,
+  facing: str(r.facing) || undefined,
+  furnishing: str(r.furnishing) || undefined,
+  features: arr(r.features),
+  planImageUrl: str(r.plan_image_url) || undefined,
 });
 
 interface TowerBucket {
@@ -394,7 +401,7 @@ export interface LandPayload {
 
 const LAND_PARCEL_SELECT = `
   SELECT id, code, name, village, district, state, survey_no, total_acres, total_guntas,
-         rate_per_acre, zoning, title_status, seller, docs_count, status
+         rate_per_acre, zoning, title_status, seller, facing, provisions, docs_count, status
   FROM land_parcels`;
 
 async function mapParcelRow(r: DbRow, highlights: Record<string, string>): Promise<LandParcel> {
@@ -415,6 +422,8 @@ async function mapParcelRow(r: DbRow, highlights: Record<string, string>): Promi
     seller: str(r.seller),
     docsCount: num(r.docs_count),
     highlight: highlights[str(r.code)],
+    facing: str(r.facing) || undefined,
+    provisions: arr(r.provisions),
   };
 }
 
@@ -437,7 +446,8 @@ async function fetchParcelById(id: string): Promise<LandParcel | null> {
 async function fetchPlotLayouts(): Promise<PlotLayout[]> {
   const rows = await q<DbRow>(`
     SELECT l.id AS layout_id, l.name AS layout_name,
-           pt.id AS plot_id, pt.plot_no, pt.zone, pt.area_sqft, pt.price, pt.status
+           pt.id AS plot_id, pt.plot_no, pt.zone, pt.area_sqft, pt.price, pt.status,
+           pt.facing, pt.features
     FROM plot_layouts l
     JOIN plots pt ON pt.layout_id = l.id
     ORDER BY l.name, pt.plot_no`);
@@ -458,6 +468,8 @@ async function fetchPlotLayouts(): Promise<PlotLayout[]> {
       sqft: num(r.area_sqft),
       price: num(r.price),
       status: str(r.status) as UnitStatus,
+      facing: str(r.facing) || undefined,
+      features: arr(r.features),
     });
   }
   return layouts;
@@ -472,6 +484,440 @@ export async function getLand(): Promise<LandPayload> {
     titleStatusMeta,
     summary: computeLandSummary(parcels),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Setup / Master data
+// Create APIs backing the Web Setup workspace: projects (apartments +
+// independent houses), land parcels/layouts, customers and employees.
+// ---------------------------------------------------------------------------
+
+export interface CreateUnitInput {
+  unitNo: string;
+  unitType: string;
+  floor: number;
+  blockCode?: string;
+  facing?: string;
+  furnishing?: string;
+  features?: string[];
+  planImageUrl?: string;
+  sqft?: number;
+  price?: number;
+  status?: UnitStatus;
+}
+
+export interface CreateTowerInput {
+  code: string;
+  name?: string;
+  units: CreateUnitInput[];
+}
+
+export interface CreateProjectInput {
+  code: string;
+  name: string;
+  projectType?: "residential" | "commercial" | "mixed_use" | "plotted";
+  location?: string;
+  status?: "planning" | "under_construction" | "handed_over" | "completed" | "archived";
+  towers: CreateTowerInput[];
+}
+
+export async function createProject(input: CreateProjectInput): Promise<{ projectId: string; projectCode: string; units: number }> {
+  const projectId = randomUUID();
+  let unitCount = 0;
+  await tx(async (client) => {
+    await client.query(
+      `INSERT INTO projects (id, code, name, project_type, status, location)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [projectId, input.code, input.name, input.projectType ?? "residential", input.status ?? "planning", input.location ?? ""],
+    );
+    for (const tower of input.towers) {
+      const towerId = randomUUID();
+      const maxFloor = Math.max(0, ...tower.units.map((u) => u.floor || 1));
+      await client.query(
+        `INSERT INTO towers (id, project_id, code, name, total_floors) VALUES ($1, $2, $3, $4, $5)`,
+        [towerId, projectId, tower.code, tower.name ?? tower.code, maxFloor],
+      );
+      const floorCache = new Map<number, string>();
+      const blockCache = new Map<string, string>();
+      for (const unit of tower.units) {
+        const floorNo = unit.floor || 1;
+        let floorId = floorCache.get(floorNo);
+        if (!floorId) {
+          const res = await client.query(
+            `INSERT INTO floors (id, tower_id, floor_no, label) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (tower_id, floor_no) DO UPDATE SET label = EXCLUDED.label
+             RETURNING id::text AS id`,
+            [randomUUID(), towerId, floorNo, `Level ${floorNo}`],
+          );
+          floorId = str(res.rows[0]?.id);
+          floorCache.set(floorNo, floorId);
+        }
+        const blockCode = unit.blockCode ?? String(floorNo).padStart(2, "0");
+        const bkey = `${floorId}:${blockCode}`;
+        let blockId = blockCache.get(bkey);
+        if (!blockId) {
+          const res = await client.query(
+            `INSERT INTO blocks (id, floor_id, code) VALUES ($1, $2, $3)
+             ON CONFLICT (floor_id, code) DO UPDATE SET code = EXCLUDED.code
+             RETURNING id::text AS id`,
+            [randomUUID(), floorId, blockCode],
+          );
+          blockId = str(res.rows[0]?.id);
+          blockCache.set(bkey, blockId);
+        }
+        await client.query(
+          `INSERT INTO units (id, block_id, unit_no, unit_type, facing, furnishing, features, plan_image_url, carpet_area_sqft, super_area_sqft, bsp_price, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11)
+           ON CONFLICT (block_id, unit_no) DO NOTHING`,
+          [
+            randomUUID(),
+            blockId,
+            unit.unitNo,
+            unit.unitType,
+            unit.facing ?? null,
+            unit.furnishing ?? null,
+            unit.features?.length ? unit.features : null,
+            unit.planImageUrl ?? null,
+            unit.sqft ?? null,
+            unit.price ?? null,
+            unit.status ?? "available",
+          ],
+        );
+        unitCount++;
+      }
+    }
+  });
+  return { projectId, projectCode: input.code, units: unitCount };
+}
+
+export interface CreatePlotInput {
+  plotNo: string;
+  zone: "residential" | "villa" | "commercial";
+  areaSqft: number;
+  price: number;
+  facing?: string;
+  features?: string[];
+  status?: UnitStatus;
+}
+
+export interface CreateLayoutInput {
+  name: string;
+  plots: CreatePlotInput[];
+}
+
+export interface CreateLandParcelInput {
+  code: string;
+  name: string;
+  village?: string;
+  district?: string;
+  state?: string;
+  surveyNo?: string;
+  acres: number;
+  guntas?: number;
+  ratePerAcre: number;
+  zoning?: LandZoning;
+  titleStatus?: TitleStatus;
+  seller?: string;
+  facing?: string;
+  provisions?: string[];
+  layouts?: CreateLayoutInput[];
+}
+
+export async function createLandParcel(input: CreateLandParcelInput): Promise<{ parcelId: string; parcelCode: string; plots: number }> {
+  const parcelId = randomUUID();
+  let plotCount = 0;
+  await tx(async (client) => {
+    await client.query(
+      `INSERT INTO land_parcels (id, code, name, village, district, state, survey_no, total_acres, total_guntas,
+                                 rate_per_acre, zoning, title_status, seller, facing, provisions, docs_count, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, 'available')`,
+      [
+        parcelId,
+        input.code,
+        input.name,
+        input.village ?? null,
+        input.district ?? null,
+        input.state ?? "Karnataka",
+        input.surveyNo ?? null,
+        input.acres,
+        input.guntas ?? 0,
+        input.ratePerAcre,
+        input.zoning ?? "NA_Residential",
+        input.titleStatus ?? "in_review",
+        input.seller ?? null,
+        input.facing ?? null,
+        input.provisions?.length ? input.provisions : null,
+      ],
+    );
+    for (const layout of input.layouts ?? []) {
+      const layoutId = randomUUID();
+      await client.query(
+        `INSERT INTO plot_layouts (id, parcel_id, name, total_plots) VALUES ($1, $2, $3, $4)`,
+        [layoutId, parcelId, layout.name, layout.plots.length],
+      );
+      for (const plot of layout.plots) {
+        await client.query(
+          `INSERT INTO plots (id, layout_id, plot_no, zone, facing, features, area_sqft, price, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            randomUUID(),
+            layoutId,
+            plot.plotNo,
+            plot.zone,
+            plot.facing ?? null,
+            plot.features?.length ? plot.features : null,
+            plot.areaSqft,
+            plot.price,
+            plot.status ?? "available",
+          ],
+        );
+        plotCount++;
+      }
+    }
+  });
+  return { parcelId, parcelCode: input.code, plots: plotCount };
+}
+
+export interface CreateCustomerInput {
+  name: string;
+  phone?: string;
+  email?: string;
+  pan?: string;
+  kycStatus?: "pending" | "verified" | "rejected" | "not_applicable";
+}
+
+export interface SetupCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  pan: string;
+  kycStatus: string;
+  createdAt: string;
+}
+
+export async function createCustomer(input: CreateCustomerInput): Promise<SetupCustomer> {
+  const id = randomUUID();
+  const res = await qOne<DbRow>(
+    `INSERT INTO customers (id, name, pan, kyc_status, primary_phone, primary_email)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, pan, kyc_status, primary_phone, primary_email, created_at`,
+    [id, input.name, input.pan ?? null, input.kycStatus ?? "pending", input.phone ?? null, input.email ?? null],
+  );
+  return {
+    id: str(res?.id),
+    name: str(res?.name),
+    phone: str(res?.primary_phone),
+    email: str(res?.primary_email),
+    pan: str(res?.pan),
+    kycStatus: str(res?.kyc_status),
+    createdAt: isoStr(res?.created_at),
+  };
+}
+
+export async function listCustomers(): Promise<SetupCustomer[]> {
+  const rows = await q<DbRow>(`
+    SELECT id, name, pan, kyc_status, primary_phone, primary_email, created_at
+    FROM customers ORDER BY created_at DESC`);
+  return rows.map((r) => ({
+    id: str(r.id),
+    name: str(r.name),
+    phone: str(r.primary_phone),
+    email: str(r.primary_email),
+    pan: str(r.pan),
+    kycStatus: str(r.kyc_status),
+    createdAt: isoStr(r.created_at),
+  }));
+}
+
+export interface CreateEmployeeInput {
+  employeeCode?: string;
+  name: string;
+  designation?: string;
+  employeeType?: "full_time" | "contract" | "consultant";
+  joiningDate?: string;
+  department?: string;
+}
+
+export interface SetupEmployee {
+  id: string;
+  employeeCode: string;
+  name: string;
+  designation: string;
+  employeeType: string;
+  joiningDate: string;
+  department: string;
+  status: string;
+}
+
+export async function createEmployee(input: CreateEmployeeInput): Promise<SetupEmployee> {
+  const employeeCode = input.employeeCode?.trim() ?? `EMP-${String(Date.now()).slice(-5)}`;
+  let departmentId: string | null = null;
+  let departmentName = "";
+  if (input.department?.trim()) {
+    const existing = await qOne<DbRow>(`SELECT id, name FROM departments WHERE code = $1 OR name = $1`, [input.department.trim()]);
+    if (existing) {
+      departmentId = str(existing.id);
+      departmentName = str(existing.name);
+    } else {
+      const code = input.department.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      const res = await qOne<DbRow>(
+        `INSERT INTO departments (id, code, name) VALUES ($1, $2, $3)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id, name`,
+        [randomUUID(), code, input.department.trim()],
+      );
+      departmentId = str(res?.id);
+      departmentName = str(res?.name);
+    }
+  }
+  const id = randomUUID();
+  const res = await qOne<DbRow>(
+    `INSERT INTO employees (id, user_id, department_id, employee_code, name, designation, employee_type, joining_date, status)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, 'active')
+     RETURNING id, employee_code, name, designation, employee_type, joining_date, status`,
+    [id, departmentId, employeeCode, input.name, input.designation ?? null, input.employeeType ?? "full_time", input.joiningDate ?? null],
+  );
+  return {
+    id: str(res?.id),
+    employeeCode: str(res?.employee_code),
+    name: str(res?.name),
+    designation: str(res?.designation) || "—",
+    employeeType: str(res?.employee_type),
+    joiningDate: dateStr(res?.joining_date),
+    department: departmentName || "—",
+    status: str(res?.status),
+  };
+}
+
+export async function listEmployees(): Promise<SetupEmployee[]> {
+  const rows = await q<DbRow>(`
+    SELECT e.id, e.employee_code, e.name, e.designation, e.employee_type, e.joining_date, e.status,
+           d.name AS department
+    FROM employees e
+    LEFT JOIN departments d ON d.id = e.department_id
+    ORDER BY e.name`);
+  return rows.map((r) => ({
+    id: str(r.id),
+    employeeCode: str(r.employee_code),
+    name: str(r.name),
+    designation: str(r.designation) || "—",
+    employeeType: str(r.employee_type),
+    joiningDate: dateStr(r.joining_date),
+    department: str(r.department) || "—",
+    status: str(r.status),
+  }));
+}
+
+export interface VendorContactInput {
+  name?: string;
+  phone?: string;
+  email?: string;
+  isPrimary?: boolean;
+}
+
+export interface CreateVendorInput {
+  vendorCode?: string;
+  name: string;
+  category?: string;
+  gstin?: string;
+  pan?: string;
+  city?: string;
+  status?: "pending" | "verified" | "blacklisted" | "inactive";
+  contacts?: VendorContactInput[];
+}
+
+export interface SetupVendor {
+  id: string;
+  vendorCode: string;
+  name: string;
+  category: string;
+  gstin: string;
+  pan: string;
+  city: string;
+  status: string;
+  primaryContact: string;
+  contacts: number;
+}
+
+function vendorFromRow(r: DbRow): SetupVendor {
+  return {
+    id: str(r.id),
+    vendorCode: str(r.vendor_code),
+    name: str(r.name),
+    category: str(r.category) || "—",
+    gstin: str(r.gstin) || "—",
+    pan: str(r.pan) || "—",
+    city: str(r.city) || "—",
+    status: str(r.status),
+    primaryContact: str(r.primary_contact) || "—",
+    contacts: num(r.contacts),
+  };
+}
+
+export async function createVendor(input: CreateVendorInput): Promise<SetupVendor> {
+  const vendorCode = input.vendorCode?.trim() ?? `V-${String(Date.now()).slice(-5)}`;
+  const id = randomUUID();
+  await tx(async (client) => {
+    await client.query(
+      `INSERT INTO vendors (id, vendor_code, name, category, gstin, pan, city, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, vendorCode, input.name, input.category ?? null, input.gstin ?? null, input.pan ?? null, input.city ?? null, input.status ?? "pending"],
+    );
+    for (const c of input.contacts ?? []) {
+      if (!c.name?.trim()) continue;
+      await client.query(
+        `INSERT INTO vendor_contacts (id, vendor_id, name, phone, email, is_primary)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [randomUUID(), id, c.name.trim(), c.phone ?? null, c.email ?? null, c.isPrimary ?? false],
+      );
+    }
+  });
+  const r = await qOne<DbRow>(
+    `SELECT v.id, v.vendor_code, v.name, v.category, v.gstin, v.pan, v.city, v.status,
+            (SELECT vc.name FROM vendor_contacts vc WHERE vc.vendor_id = v.id ORDER BY vc.is_primary DESC, vc.name LIMIT 1) AS primary_contact,
+            (SELECT count(*)::int FROM vendor_contacts vc WHERE vc.vendor_id = v.id) AS contacts
+     FROM vendors v WHERE v.id = $1`,
+    [id],
+  );
+  return vendorFromRow(r!);
+}
+
+export async function listVendors(): Promise<SetupVendor[]> {
+  const rows = await q<DbRow>(
+    `SELECT v.id, v.vendor_code, v.name, v.category, v.gstin, v.pan, v.city, v.status,
+            (SELECT vc.name FROM vendor_contacts vc WHERE vc.vendor_id = v.id ORDER BY vc.is_primary DESC, vc.name LIMIT 1) AS primary_contact,
+            (SELECT count(*)::int FROM vendor_contacts vc WHERE vc.vendor_id = v.id) AS contacts
+     FROM vendors v ORDER BY v.name`,
+  );
+  return rows.map(vendorFromRow);
+}
+
+export interface CreateAmenityInput {
+  code: string;
+  name: string;
+}
+
+export interface SetupAmenity {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export async function createAmenity(input: CreateAmenityInput): Promise<SetupAmenity> {
+  const code = input.code.trim().toUpperCase().replace(/\s+/g, "_");
+  const res = await qOne<DbRow>(
+    `INSERT INTO amenities (id, code, name) VALUES ($1, $2, $3)
+     ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+     RETURNING id, code, name`,
+    [randomUUID(), code, input.name.trim()],
+  );
+  return { id: str(res?.id), code: str(res?.code), name: str(res?.name) };
+}
+
+export async function listAmenities(): Promise<SetupAmenity[]> {
+  const rows = await q<DbRow>(`SELECT id, code, name FROM amenities ORDER BY name`);
+  return rows.map((r) => ({ id: str(r.id), code: str(r.code), name: str(r.name) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -986,7 +1432,7 @@ export async function autoMatchRecon(ref: string, description?: string): Promise
 
 export interface PortalPayload {
   milestones: Milestone[];
-  unit: { no: string; project: string; type: string; sqft: number; floor: string; price: number };
+  unit: { no: string; project: string; type: string; sqft: number; floor: string; price: number; facing?: string; furnishing?: string; features?: string[]; planImageUrl?: string };
   instalments: { id: string; name: string; due: string; amount: number; paid: boolean; paidOn: string }[];
   docs: { name: string; tag: string }[];
   amenities: UnitAmenity[];
@@ -1322,7 +1768,8 @@ export async function getPortal(): Promise<PortalPayload> {
   const milestones = await fetchMilestones();
   const unitRow = await qOne<DbRow>(`
     SELECT pr.name AS project_name, t.code AS tower_code, t.name AS tower_name, f.floor_no,
-           u.unit_no, bl.code AS block_code, u.unit_type, u.carpet_area_sqft, u.bsp_price
+           u.unit_no, bl.code AS block_code, u.unit_type, u.carpet_area_sqft, u.bsp_price,
+           u.facing, u.furnishing, u.features, u.plan_image_url
     FROM bookings bk
     JOIN units u ON u.id = bk.unit_id
     JOIN blocks bl ON bl.id = u.block_id
@@ -1339,8 +1786,12 @@ export async function getPortal(): Promise<PortalPayload> {
         sqft: num(unitRow.carpet_area_sqft),
         floor: `Level ${num(unitRow.floor_no)} · ${str(unitRow.tower_name).split(" · ")[0]}`,
         price: num(unitRow.bsp_price),
+        facing: str(unitRow.facing) || undefined,
+        furnishing: str(unitRow.furnishing) || undefined,
+        features: arr(unitRow.features),
+        planImageUrl: str(unitRow.plan_image_url) || undefined,
       }
-    : { no: "", project: "", type: "", sqft: 0, floor: "", price: 0 };
+    : { no: "", project: "", type: "", sqft: 0, floor: "", price: 0, features: [] };
 
   const instRows = await q<DbRow>(`
     SELECT psl.id, psl.label, psl.due_date, psl.amount, psl.status

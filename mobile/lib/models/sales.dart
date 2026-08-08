@@ -56,6 +56,10 @@ class Unit {
     required this.sqft,
     required this.price,
     required this.status,
+    this.facing,
+    this.furnishing,
+    this.features = const [],
+    this.planImageUrl,
   });
 
   final String id;
@@ -66,6 +70,10 @@ class Unit {
   final num sqft;
   final num price;
   final String status;
+  final String? facing;
+  final String? furnishing;
+  final List<String> features;
+  final String? planImageUrl;
 
   factory Unit.fromJson(Map<String, dynamic> j) => Unit(
         id: j['id'] as String? ?? '',
@@ -76,6 +84,10 @@ class Unit {
         sqft: (j['sqft'] as num?) ?? 0,
         price: (j['price'] as num?) ?? 0,
         status: j['status'] as String? ?? 'available',
+        facing: j['facing'] as String?,
+        furnishing: j['furnishing'] as String?,
+        features: ((j['features'] as List?) ?? []).cast<String>(),
+        planImageUrl: j['planImageUrl'] as String?,
       );
 }
 

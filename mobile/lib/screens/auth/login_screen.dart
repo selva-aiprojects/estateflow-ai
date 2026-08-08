@@ -55,27 +55,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.sidebar,
-                        borderRadius: BorderRadius.circular(14),
+                    Image.asset(
+                      'assets/branding/logo.png',
+                      width: 220,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'AI Real Estate OS',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                        letterSpacing: 0.4,
                       ),
-                      child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 28),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'EstateFlow',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: AppColors.text),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Sign in to your workspace',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 28),
                     TextFormField(

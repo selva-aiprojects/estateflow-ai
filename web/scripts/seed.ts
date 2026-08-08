@@ -171,10 +171,45 @@ async function main() {
   // ---------------------------------------------------------------------------
   // 3. PROJECTS / TOWERS / FLOORS / BLOCKS / UNITS
   // ---------------------------------------------------------------------------
+  const FACINGS = ["East", "West", "North", "South"] as const;
+  const unitFeaturesByType: Record<string, string[]> = {
+    "1BHK": ["24x7 Security", "Power Backup", "Lift"],
+    "2BHK": ["24x7 Security", "Power Backup", "Lift", "Clubhouse Access"],
+    "3BHK": ["24x7 Security", "Power Backup", "Lift", "Clubhouse Access", "EV Charging"],
+    "4BHK": ["24x7 Security", "Power Backup", "Lift", "Clubhouse Access", "EV Charging", "Carpark"],
+    "5BHK": ["24x7 Security", "Power Backup", "Lift", "Clubhouse Access", "EV Charging", "Carpark"],
+    penthouse: ["Private Terrace", "24x7 Security", "Power Backup", "Clubhouse Access"],
+    office: ["Lift", "Power Backup", "Reception", "Parking"],
+    retail: ["High Street Frontage", "Power Backup"],
+    villa: ["Private Garden", "Car Parking"],
+    independent_house: ["Private Garden", "Car Parking"],
+    studio: ["24x7 Security", "Power Backup", "Lift"],
+  };
+  const defaultUnitFeatures = (type: string) => unitFeaturesByType[type] ?? ["24x7 Security", "Power Backup"];
+  const unitFacing = (no: string, provided?: string) => {
+    if (provided) return provided;
+    const letter = no[no.length - 1] ?? "A";
+    return FACINGS[(letter.charCodeAt(0) - 65) % 4] ?? "East";
+  };
+  const unitFurnishing = (type: string, provided?: string) =>
+    provided ?? (["villa", "penthouse", "independent_house"].includes(type) ? "semi_furnished" : "unfurnished");
+  const planImageFor = (type: string): string | null => {
+    if (type === "office") return "/floorplans/office.svg";
+    if (type === "retail") return "/floorplans/office.svg";
+    if (["villa", "independent_house"].includes(type)) return "/floorplans/independent-house.svg";
+    if (["3BHK", "4BHK", "5BHK", "penthouse"].includes(type)) return "/floorplans/3bhk.svg";
+    return "/floorplans/2bhk.svg";
+  };
+  const plotFeaturesByZone: Record<string, string[]> = {
+    villa: ["Corner Plot", "Garden Front"],
+    commercial: ["High Street Frontage"],
+    residential: ["Wide Road Frontage"],
+  };
+
   const unitNoToId = new Map<string, string>();
   const projectUuidByCode = new Map<string, string>();
   const towerUuidByCode = new Map<string, string>();
-  const projectType: Record<string, string> = { ELEVATE: "residential", OPUS: "commercial" };
+  const projectType: Record<string, string> = { ELEVATE: "residential", OPUS: "commercial", SERENE: "residential" };
 
   for (const p of projects) {
     const projectId = uuid(`project:${p.id}`);
@@ -218,9 +253,21 @@ async function main() {
         const unitNo = u.no.split("-").slice(2).join("-") || "A";
         await run(
           `INSERT INTO ${SCHEMA}.units
-            (id, block_id, unit_no, unit_type, carpet_area_sqft, super_area_sqft, bsp_price, status)
-           VALUES ($1, $2, $3, $4, $5, $5, $6, $7)`,
-          [unitId, blockId, unitNo, u.type, u.sqft, u.price, u.status],
+            (id, block_id, unit_no, unit_type, facing, furnishing, features, plan_image_url, carpet_area_sqft, super_area_sqft, bsp_price, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11)`,
+          [
+            unitId,
+            blockId,
+            unitNo,
+            u.type,
+            unitFacing(u.no, u.facing),
+            unitFurnishing(u.type, u.furnishing),
+            u.features ?? defaultUnitFeatures(u.type),
+            planImageFor(u.type),
+            u.sqft,
+            u.price,
+            u.status,
+          ],
         );
         unitNoToId.set(u.no, unitId);
       }
@@ -257,9 +304,9 @@ async function main() {
       );
       const uid = uuid(`unit:t1-06-${letter.toLowerCase()}`);
       await run(
-        `INSERT INTO ${SCHEMA}.units (id, block_id, unit_no, unit_type, carpet_area_sqft, super_area_sqft, bsp_price, status)
-         VALUES ($1, $2, $3, '3BHK', 1680, 1680, $4, 'blocked')`,
-        [uid, bid, letter, price],
+        `INSERT INTO ${SCHEMA}.units (id, block_id, unit_no, unit_type, facing, furnishing, features, plan_image_url, carpet_area_sqft, super_area_sqft, bsp_price, status)
+         VALUES ($1, $2, $3, '3BHK', $4, 'unfurnished', $5, $6, 1680, 1680, $7, 'blocked')`,
+        [uid, bid, letter, FACINGS[(code.charCodeAt(0) - 48) % 4] ?? "East", defaultUnitFeatures("3BHK"), planImageFor("3BHK"), price],
       );
       unitNoToId.set(`T1-06-${letter}`, uid);
     }
@@ -276,10 +323,10 @@ async function main() {
     await run(
       `INSERT INTO ${SCHEMA}.land_parcels
         (id, code, name, village, district, state, survey_no, total_acres, total_guntas,
-         rate_per_acre, zoning, title_status, title_notes, seller, docs_count, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+         rate_per_acre, zoning, title_status, title_notes, seller, facing, provisions, docs_count, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [id, lp.code, lp.name, lp.village, lp.district, lp.state, lp.surveyNo, lp.acres, lp.guntas,
-       lp.ratePerAcre, lp.zoning, lp.titleStatus, null, lp.seller, lp.docsCount, lp.status],
+       lp.ratePerAcre, lp.zoning, lp.titleStatus, null, lp.seller, lp.facing ?? "East", lp.provisions ?? [], lp.docsCount, lp.status],
     );
   }
   const plotUuidById = new Map<string, string>();
@@ -293,9 +340,9 @@ async function main() {
       const id = uuid(`plot:${pt.id}`);
       plotUuidById.set(pt.id, id);
       await run(
-        `INSERT INTO ${SCHEMA}.plots (id, layout_id, plot_no, zone, area_sqft, price, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, layoutId, pt.no, pt.zone, pt.sqft, pt.price, pt.status],
+        `INSERT INTO ${SCHEMA}.plots (id, layout_id, plot_no, zone, facing, features, area_sqft, price, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [id, layoutId, pt.no, pt.zone, pt.facing ?? "East", pt.features ?? plotFeaturesByZone[pt.zone] ?? [], pt.sqft, pt.price, pt.status],
       );
     }
   }

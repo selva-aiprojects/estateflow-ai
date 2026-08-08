@@ -26,6 +26,7 @@ import {
   Store,
   Handshake,
   Cpu,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { IconButton } from "@/components/ui";
@@ -59,6 +60,7 @@ const navGroups: { id: NavGroupId; items: NavItem[] }[] = [
     id: "management",
     items: [
       { href: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard, persona: "management", group: "management" },
+      { href: "/setup", label: "Setup · Properties & People", icon: Settings2, persona: "management", group: "management" },
       { href: "/legal", label: "Legal & RERA", icon: Scale, persona: "management", group: "management" },
       { href: "/ai", label: "AI Command Center", icon: Cpu, persona: "management", group: "management" },
     ],

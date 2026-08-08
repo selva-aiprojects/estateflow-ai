@@ -289,6 +289,74 @@ class _UnitCard extends StatelessWidget {
               _UnitFact(icon: Icons.currency_rupee, label: 'Price', value: Fmt.moneyCompact(p.unit.price)),
             ],
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _UnitFact(
+                icon: Icons.explore_outlined,
+                label: 'Facing',
+                value: p.unit.facing ?? '—',
+              ),
+              _UnitFact(
+                icon: Icons.chair_outlined,
+                label: 'Furnishing',
+                value: (p.unit.furnishing ?? '—').replaceAll('_', ' '),
+              ),
+              _UnitFact(icon: Icons.square_foot, label: 'Configuration', value: p.unit.type.replaceAll('_', ' ')),
+            ],
+          ),
+          if (p.unit.features.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: p.unit.features
+                    .map(
+                      (f) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          f,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
+          if (p.unit.planImageUrl != null) ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.06),
+                padding: const EdgeInsets.all(8),
+                child: AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: Image.network(
+                    p.unit.planImageUrl!.startsWith('http')
+                        ? p.unit.planImageUrl!
+                        : '${AppScope.of(context).api.baseUrl}${p.unit.planImageUrl}',
+                    fit: BoxFit.contain,
+                    loadingBuilder: (_, child, progress) => progress == null
+                        ? child
+                        : const Center(
+                            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                          ),
+                    errorBuilder: (_, _, _) => const Center(
+                      child: Icon(Icons.image_not_supported_outlined, size: 32, color: Colors.white38),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

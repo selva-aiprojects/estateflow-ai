@@ -186,6 +186,14 @@ export function InventoryMap() {
             <div className="space-y-4 px-5 py-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-md bg-surface-muted/60 p-3">
+                  <p className="text-[11px] text-text-muted">Facing</p>
+                  <p className="mt-0.5 text-sm font-semibold text-text">{selected.facing ?? "—"}</p>
+                </div>
+                <div className="rounded-md bg-surface-muted/60 p-3">
+                  <p className="text-[11px] text-text-muted">Furnishing</p>
+                  <p className="mt-0.5 text-sm font-semibold capitalize text-text">{selected.furnishing?.replace("_", " ") ?? "—"}</p>
+                </div>
+                <div className="rounded-md bg-surface-muted/60 p-3">
                   <p className="text-[11px] text-text-muted">Carpet Area</p>
                   <p className="mt-0.5 text-sm font-semibold text-text tabular-nums">{selected.sqft.toLocaleString("en-IN")} sq.ft</p>
                 </div>
@@ -200,6 +208,29 @@ export function InventoryMap() {
                   <p className="mt-0.5 text-lg font-semibold text-text tabular-nums">{inr(selected.price)}</p>
                 </div>
               </div>
+
+              {selected.features?.length ? (
+                <div>
+                  <p className="mb-1.5 text-[11px] text-text-muted">Features</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selected.features.map((f) => (
+                      <span key={f} className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-text-muted">
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {selected.planImageUrl ? (
+                <div>
+                  <p className="mb-1.5 text-[11px] text-text-muted">Floor Plan</p>
+                  <div className="overflow-hidden rounded-md border border-border bg-surface-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selected.planImageUrl} alt={`Floor plan for ${selected.no}`} className="w-full object-contain" loading="lazy" />
+                  </div>
+                </div>
+              ) : null}
 
               <div className="rounded-md border border-warning/20 bg-warning-soft/60 p-3 text-[11px] leading-relaxed text-warning">
                 <span className="inline-flex items-center gap-1 font-medium"><Info size={12} /> AI Sales Agent note:</span>{" "}

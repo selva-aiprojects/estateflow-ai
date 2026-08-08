@@ -491,10 +491,27 @@ function ParcelDetail({
             <p className="mt-0.5 font-medium text-text">{parcel.seller}</p>
           </div>
           <div className="rounded-md border border-border p-2.5">
+            <p className="text-text-muted">Facing</p>
+            <p className="mt-0.5 font-medium text-text">{parcel.facing ?? "—"}</p>
+          </div>
+          <div className="rounded-md border border-border p-2.5">
             <p className="text-text-muted">Status</p>
             <p className="mt-0.5 font-medium text-text" style={{ color: meta.color }}>{meta.label}</p>
           </div>
         </div>
+
+        {parcel.provisions?.length ? (
+          <div>
+            <p className="mb-1.5 text-[11px] text-text-muted">Provisions & access</p>
+            <div className="flex flex-wrap gap-1.5">
+              {parcel.provisions.map((p) => (
+                <span key={p} className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-text-muted">
+                  {p}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-md border border-primary/20 bg-primary-soft/60 p-3 text-[11px] leading-relaxed text-primary">
           <span className="inline-flex items-center gap-1 font-medium"><Info size={12} /> AI Legal Agent:</span>{" "}
@@ -568,6 +585,14 @@ function PlotDetail({
             <p className="mt-0.5 text-sm font-semibold text-text tabular-nums">{plot.sqft.toLocaleString("en-IN")} sq.ft</p>
           </div>
           <div className="rounded-md bg-surface-muted/60 p-3">
+            <p className="text-[11px] text-text-muted">Facing</p>
+            <p className="mt-0.5 text-sm font-semibold text-text">{plot.facing ?? "—"}</p>
+          </div>
+          <div className="rounded-md bg-surface-muted/60 p-3">
+            <p className="text-[11px] text-text-muted">Zone</p>
+            <p className="mt-0.5 text-sm font-semibold capitalize text-text">{plot.zone}</p>
+          </div>
+          <div className="rounded-md bg-surface-muted/60 p-3">
             <p className="text-[11px] text-text-muted">Status</p>
             <p className="mt-0.5 text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</p>
           </div>
@@ -576,6 +601,19 @@ function PlotDetail({
             <p className="mt-0.5 text-lg font-semibold text-text tabular-nums">{inr(plot.price)}</p>
           </div>
         </div>
+
+        {plot.features?.length ? (
+          <div>
+            <p className="mb-1.5 text-[11px] text-text-muted">Plot features</p>
+            <div className="flex flex-wrap gap-1.5">
+              {plot.features.map((f) => (
+                <span key={f} className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-text-muted">
+                  {f}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-md border border-warning/20 bg-warning-soft/60 p-3 text-[11px] leading-relaxed text-warning">
           <span className="inline-flex items-center gap-1 font-medium"><Info size={12} /> AI Sales Agent note:</span>{" "}

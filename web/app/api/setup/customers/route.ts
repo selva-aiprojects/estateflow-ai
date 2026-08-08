@@ -1,0 +1,25 @@
+import { NextResponse } from "next/server";
+import { createCustomer, listCustomers, type CreateCustomerInput } from "@/lib/repo";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  return NextResponse.json({ data: await listCustomers() });
+}
+
+export async function POST(req: Request) {
+  let body: Record<string, unknown> = {};
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid json body" }, { status: 400 });
+  }
+  try {
+    const customer = await createCustomer(body as unknown as CreateCustomerInput);
+    return NextResponse.json({ data: customer }, { status: 201 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "create failed";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}

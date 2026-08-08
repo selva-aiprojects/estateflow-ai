@@ -33,6 +33,10 @@ class PortalUnit {
     required this.sqft,
     required this.floor,
     required this.price,
+    this.facing,
+    this.furnishing,
+    this.features = const [],
+    this.planImageUrl,
   });
 
   final String no;
@@ -41,6 +45,10 @@ class PortalUnit {
   final num sqft;
   final String floor;
   final num price;
+  final String? facing;
+  final String? furnishing;
+  final List<String> features;
+  final String? planImageUrl;
 
   factory PortalUnit.fromJson(Map<String, dynamic> j) => PortalUnit(
         no: j['no'] as String? ?? '',
@@ -49,6 +57,10 @@ class PortalUnit {
         sqft: (j['sqft'] as num?) ?? 0,
         floor: j['floor'] as String? ?? '',
         price: (j['price'] as num?) ?? 0,
+        facing: j['facing'] as String?,
+        furnishing: j['furnishing'] as String?,
+        features: ((j['features'] as List?) ?? []).cast<String>(),
+        planImageUrl: j['planImageUrl'] as String?,
       );
 }
 

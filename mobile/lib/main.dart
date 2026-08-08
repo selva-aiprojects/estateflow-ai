@@ -8,6 +8,7 @@ import 'screens/shell/home_shell.dart';
 import 'services/api_service.dart';
 import 'state/app_scope.dart';
 import 'state/session_controller.dart';
+import 'widgets/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,9 +46,7 @@ class EstateFlowApp extends StatelessWidget {
           animation: session,
           builder: (context, _) {
             if (session.initializing) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
+              return const SplashScreen();
             }
             return session.isLoggedIn ? const HomeShell() : const LoginScreen();
           },

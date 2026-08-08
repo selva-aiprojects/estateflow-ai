@@ -93,6 +93,10 @@ export interface Unit {
   sqft: number;
   price: number;
   status: UnitStatus;
+  facing?: string;
+  furnishing?: string;
+  features?: string[];
+  planImageUrl?: string;
 }
 
 export interface Tower {
@@ -187,14 +191,36 @@ export const projects: Project[] = [
         code: "OP",
         name: "Opus Tower · Commercial",
         units: [
-          { id: "u41", no: "OP-01-A", type: "office", floor: 1, tower: "OP", sqft: 3200, price: 44800000, status: "sold" },
-          { id: "u42", no: "OP-01-B", type: "office", floor: 1, tower: "OP", sqft: 2600, price: 36400000, status: "available" },
-          { id: "u43", no: "OP-02-A", type: "office", floor: 2, tower: "OP", sqft: 3200, price: 45200000, status: "token_paid" },
-          { id: "u44", no: "OP-02-B", type: "office", floor: 2, tower: "OP", sqft: 2600, price: 36800000, status: "available" },
-          { id: "u45", no: "OP-03-A", type: "retail", floor: 3, tower: "OP", sqft: 1450, price: 18800000, status: "available" },
-          { id: "u46", no: "OP-03-B", type: "retail", floor: 3, tower: "OP", sqft: 1500, price: 19500000, status: "blocked" },
-          { id: "u47", no: "OP-04-A", type: "office", floor: 4, tower: "OP", sqft: 3200, price: 45600000, status: "available" },
-          { id: "u48", no: "OP-04-B", type: "office", floor: 4, tower: "OP", sqft: 2600, price: 37200000, status: "sold" },
+          { id: "u41", no: "OP-01-A", type: "office", floor: 1, tower: "OP", sqft: 3200, price: 44800000, status: "sold", facing: "East", furnishing: "semi_furnished", features: ["Reception", "Lift", "Power Backup", "Parking"] },
+          { id: "u42", no: "OP-01-B", type: "office", floor: 1, tower: "OP", sqft: 2600, price: 36400000, status: "available", facing: "West", furnishing: "unfurnished", features: ["Reception", "Lift", "Power Backup", "Parking"] },
+          { id: "u43", no: "OP-02-A", type: "office", floor: 2, tower: "OP", sqft: 3200, price: 45200000, status: "token_paid", facing: "East", furnishing: "unfurnished", features: ["Lift", "Power Backup", "Server Room", "Parking"] },
+          { id: "u44", no: "OP-02-B", type: "office", floor: 2, tower: "OP", sqft: 2600, price: 36800000, status: "available", facing: "West", furnishing: "unfurnished", features: ["Lift", "Power Backup", "Parking"] },
+          { id: "u45", no: "OP-03-A", type: "retail", floor: 3, tower: "OP", sqft: 1450, price: 18800000, status: "available", facing: "North", furnishing: "unfurnished", features: ["High Street Frontage", "Power Backup"] },
+          { id: "u46", no: "OP-03-B", type: "retail", floor: 3, tower: "OP", sqft: 1500, price: 19500000, status: "blocked", facing: "South", furnishing: "unfurnished", features: ["High Street Frontage", "Power Backup"] },
+          { id: "u47", no: "OP-04-A", type: "office", floor: 4, tower: "OP", sqft: 3200, price: 45600000, status: "available", facing: "East", furnishing: "unfurnished", features: ["Lift", "Power Backup", "Server Room", "Parking"] },
+          { id: "u48", no: "OP-04-B", type: "office", floor: 4, tower: "OP", sqft: 2600, price: 37200000, status: "sold", facing: "West", furnishing: "semi_furnished", features: ["Lift", "Power Backup", "Parking"] },
+        ],
+      },
+    ],
+  },
+  {
+    id: "p3",
+    code: "SERENE",
+    name: "Serene Independent Villas",
+    location: "Kudlu Gate, Bengaluru",
+    reraNo: "PRM/KA/RERA/1345/520/PR/2026",
+    towers: [
+      {
+        id: "t4",
+        code: "V",
+        name: "Villa Row · Individual Houses",
+        units: [
+          { id: "u101", no: "V-01-A", type: "independent_house", floor: 1, tower: "V", sqft: 2200, price: 24500000, status: "available", facing: "East", furnishing: "unfurnished", features: ["Private Garden", "Car Parking", "Servant Room"] },
+          { id: "u102", no: "V-02-A", type: "independent_house", floor: 1, tower: "V", sqft: 2400, price: 26200000, status: "available", facing: "North", furnishing: "semi_furnished", features: ["Private Garden", "Car Parking", "Pooja Room"] },
+          { id: "u103", no: "V-03-A", type: "independent_house", floor: 1, tower: "V", sqft: 2600, price: 28000000, status: "token_paid", facing: "East", furnishing: "unfurnished", features: ["Private Garden", "Car Parking", "Servant Room"] },
+          { id: "u104", no: "V-04-A", type: "independent_house", floor: 1, tower: "V", sqft: 2300, price: 25100000, status: "sold", facing: "West", furnishing: "fully_furnished", features: ["Private Garden", "Car Parking", "Terrace"] },
+          { id: "u105", no: "V-05-A", type: "independent_house", floor: 1, tower: "V", sqft: 2500, price: 26900000, status: "available", facing: "South", furnishing: "unfurnished", features: ["Private Garden", "Car Parking", "Pooja Room"] },
+          { id: "u106", no: "V-06-A", type: "independent_house", floor: 1, tower: "V", sqft: 2700, price: 28900000, status: "blocked", facing: "North", furnishing: "semi_furnished", features: ["Private Garden", "Car Parking", "Servant Room", "Terrace"] },
         ],
       },
     ],
@@ -246,15 +272,17 @@ export interface LandParcel {
   seller: string;
   docsCount: number;
   highlight?: string;
+  facing?: string;
+  provisions?: string[];
 }
 
 export const landParcels: LandParcel[] = [
-  { id: "lp1", code: "LP-SAR-01", name: "Sarjapura Greenfield Parcel", village: "Sarjapura", district: "Bengaluru Urban", state: "Karnataka", surveyNo: "98/2B, 98/3A", acres: 4.5, guntas: 0, ratePerAcre: 32000000, zoning: "NA_Residential", titleStatus: "clear", status: "available", seller: "N. Ramesh & Family", docsCount: 14, highlight: "4 side approach · RMZ boundary" },
-  { id: "lp2", code: "LP-HSK-02", name: "Hoskote Industrial Tract", village: "Hoskote", district: "Bengaluru Rural", state: "Karnataka", surveyNo: "451, 452/1", acres: 7.25, guntas: 0, ratePerAcre: 24000000, zoning: "Industrial", titleStatus: "in_review", status: "available", seller: "Sri Lakshmi Estates", docsCount: 9, highlight: "Industrial zone · near KIADB park" },
-  { id: "lp3", code: "LP-DEV-03", name: "Devanahalli Airport Belt", village: "Channahalli", district: "Bengaluru Rural", state: "Karnataka", surveyNo: "212, 214", acres: 3.1, guntas: 0, ratePerAcre: 41000000, zoning: "Mixed_Use", titleStatus: "clear", status: "token_paid", seller: "Suresh Gowda", docsCount: 18, highlight: "15 km from airport terminal" },
-  { id: "lp4", code: "LP-SHB-04", name: "Shamshabad Agri Parcel", village: "Shamshabad", district: "Ranga Reddy", state: "Telangana", surveyNo: "1182, 1183/P", acres: 12.0, guntas: 0, ratePerAcre: 11000000, zoning: "Agricultural", titleStatus: "clear", status: "available", seller: "Uma Devi Agricultural Co.", docsCount: 11, highlight: "Single owner · full extent" },
-  { id: "lp5", code: "LP-ATT-05", name: "Attibele SEZ Proximity", village: "Attibele", district: "Bengaluru Urban", state: "Karnataka", surveyNo: "67/4, 68", acres: 5.8, guntas: 0, ratePerAcre: 29000000, zoning: "NA_Residential", titleStatus: "litigation", status: "hold", seller: "Vijay Estates LLP", docsCount: 6, highlight: "Encumbrance litigation — legal review" },
-  { id: "lp6", code: "LP-BEL-06", name: "Beltagurki Plotted Land", village: "Beltagurki", district: "Bengaluru Rural", state: "Karnataka", surveyNo: "34, 35", acres: 2.6, guntas: 0, ratePerAcre: 38000000, zoning: "NA_Residential", titleStatus: "clear", status: "registered", seller: "Anand Trust", docsCount: 22, highlight: "Layout approval in hand · 40 plots" },
+  { id: "lp1", code: "LP-SAR-01", name: "Sarjapura Greenfield Parcel", village: "Sarjapura", district: "Bengaluru Urban", state: "Karnataka", surveyNo: "98/2B, 98/3A", acres: 4.5, guntas: 0, ratePerAcre: 32000000, zoning: "NA_Residential", titleStatus: "clear", status: "available", seller: "N. Ramesh & Family", docsCount: 14, highlight: "4 side approach · RMZ boundary", facing: "East", provisions: ["4 Side Approach", "Power Line", "Borewell"] },
+  { id: "lp2", code: "LP-HSK-02", name: "Hoskote Industrial Tract", village: "Hoskote", district: "Bengaluru Rural", state: "Karnataka", surveyNo: "451, 452/1", acres: 7.25, guntas: 0, ratePerAcre: 24000000, zoning: "Industrial", titleStatus: "in_review", status: "available", seller: "Sri Lakshmi Estates", docsCount: 9, highlight: "Industrial zone · near KIADB park", facing: "West", provisions: ["KIADB Proximity", "Water Line"] },
+  { id: "lp3", code: "LP-DEV-03", name: "Devanahalli Airport Belt", village: "Channahalli", district: "Bengaluru Rural", state: "Karnataka", surveyNo: "212, 214", acres: 3.1, guntas: 0, ratePerAcre: 41000000, zoning: "Mixed_Use", titleStatus: "clear", status: "token_paid", seller: "Suresh Gowda", docsCount: 18, highlight: "15 km from airport terminal", facing: "North", provisions: ["Airport Zone", "Road Access"] },
+  { id: "lp4", code: "LP-SHB-04", name: "Shamshabad Agri Parcel", village: "Shamshabad", district: "Ranga Reddy", state: "Telangana", surveyNo: "1182, 1183/P", acres: 12.0, guntas: 0, ratePerAcre: 11000000, zoning: "Agricultural", titleStatus: "clear", status: "available", seller: "Uma Devi Agricultural Co.", docsCount: 11, highlight: "Single owner · full extent", facing: "South", provisions: ["Irrigation", "Farm Road"] },
+  { id: "lp5", code: "LP-ATT-05", name: "Attibele SEZ Proximity", village: "Attibele", district: "Bengaluru Urban", state: "Karnataka", surveyNo: "67/4, 68", acres: 5.8, guntas: 0, ratePerAcre: 29000000, zoning: "NA_Residential", titleStatus: "litigation", status: "hold", seller: "Vijay Estates LLP", docsCount: 6, highlight: "Encumbrance litigation — legal review", facing: "East", provisions: ["SEZ Adjacent", "Wide Road"] },
+  { id: "lp6", code: "LP-BEL-06", name: "Beltagurki Plotted Land", village: "Beltagurki", district: "Bengaluru Rural", state: "Karnataka", surveyNo: "34, 35", acres: 2.6, guntas: 0, ratePerAcre: 38000000, zoning: "NA_Residential", titleStatus: "clear", status: "registered", seller: "Anand Trust", docsCount: 22, highlight: "Layout approval in hand · 40 plots", facing: "North", provisions: ["Layout Approved", "Wide Road", "Water & Power"] },
 ];
 
 export interface Plot {
@@ -264,6 +292,8 @@ export interface Plot {
   sqft: number;
   price: number;
   status: UnitStatus;
+  facing?: string;
+  features?: string[];
 }
 
 export interface PlotLayout {
@@ -279,18 +309,18 @@ export const plotLayouts: PlotLayout[] = [
     code: "VL",
     name: "Verdant Layout · Sector 1",
     plots: [
-      { id: "pt1", no: "VL-01", zone: "residential", sqft: 1500, price: 1950000, status: "available" },
-      { id: "pt2", no: "VL-02", zone: "residential", sqft: 1500, price: 1990000, status: "available" },
-      { id: "pt3", no: "VL-03", zone: "residential", sqft: 1800, price: 2420000, status: "sold" },
-      { id: "pt4", no: "VL-04", zone: "residential", sqft: 1800, price: 2460000, status: "available" },
-      { id: "pt5", no: "VL-05", zone: "villa", sqft: 2400, price: 3400000, status: "token_paid" },
-      { id: "pt6", no: "VL-06", zone: "villa", sqft: 2400, price: 3480000, status: "available" },
-      { id: "pt7", no: "VL-07", zone: "commercial", sqft: 900, price: 1350000, status: "blocked" },
-      { id: "pt8", no: "VL-08", zone: "commercial", sqft: 900, price: 1390000, status: "available" },
-      { id: "pt9", no: "VL-09", zone: "residential", sqft: 1500, price: 2010000, status: "available" },
-      { id: "pt10", no: "VL-10", zone: "residential", sqft: 1800, price: 2490000, status: "sold" },
-      { id: "pt11", no: "VL-11", zone: "villa", sqft: 2400, price: 3520000, status: "available" },
-      { id: "pt12", no: "VL-12", zone: "residential", sqft: 1500, price: 2030000, status: "available" },
+      { id: "pt1", no: "VL-01", zone: "residential", sqft: 1500, price: 1950000, status: "available", facing: "East", features: ["Wide Road Frontage"] },
+      { id: "pt2", no: "VL-02", zone: "residential", sqft: 1500, price: 1990000, status: "available", facing: "West", features: ["Corner Plot"] },
+      { id: "pt3", no: "VL-03", zone: "residential", sqft: 1800, price: 2420000, status: "sold", facing: "North", features: ["Wide Road Frontage"] },
+      { id: "pt4", no: "VL-04", zone: "residential", sqft: 1800, price: 2460000, status: "available", facing: "South", features: ["Corner Plot", "Garden Front"] },
+      { id: "pt5", no: "VL-05", zone: "villa", sqft: 2400, price: 3400000, status: "token_paid", facing: "East", features: ["Corner Plot", "Garden Front"] },
+      { id: "pt6", no: "VL-06", zone: "villa", sqft: 2400, price: 3480000, status: "available", facing: "West", features: ["Wide Road Frontage"] },
+      { id: "pt7", no: "VL-07", zone: "commercial", sqft: 900, price: 1350000, status: "blocked", facing: "North", features: ["High Street Frontage"] },
+      { id: "pt8", no: "VL-08", zone: "commercial", sqft: 900, price: 1390000, status: "available", facing: "South", features: ["High Street Frontage"] },
+      { id: "pt9", no: "VL-09", zone: "residential", sqft: 1500, price: 2010000, status: "available", facing: "East", features: ["Corner Plot"] },
+      { id: "pt10", no: "VL-10", zone: "residential", sqft: 1800, price: 2490000, status: "sold", facing: "West", features: ["Wide Road Frontage"] },
+      { id: "pt11", no: "VL-11", zone: "villa", sqft: 2400, price: 3520000, status: "available", facing: "North", features: ["Corner Plot", "Garden Front"] },
+      { id: "pt12", no: "VL-12", zone: "residential", sqft: 1500, price: 2030000, status: "available", facing: "South", features: ["Wide Road Frontage"] },
     ],
   },
 ];

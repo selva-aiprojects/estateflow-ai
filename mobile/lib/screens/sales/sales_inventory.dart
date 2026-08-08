@@ -307,6 +307,11 @@ class _UnitDetailScreenState extends State<UnitDetailScreen> {
   Widget build(BuildContext context) {
     final statusMeta = widget.meta[unit.status];
     final statusColor = statusMeta == null ? AppColors.textSubtle : colorFromHex(statusMeta.dot);
+    final planUrl = unit.planImageUrl == null
+        ? null
+        : (unit.planImageUrl!.startsWith('http')
+            ? unit.planImageUrl!
+            : '${AppScope.of(context).api.baseUrl}${unit.planImageUrl}');
     return Scaffold(
       appBar: AppBar(title: Text(unit.no)),
       body: ListView(
@@ -347,6 +352,66 @@ class _UnitDetailScreenState extends State<UnitDetailScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Unit details',
+            child: Column(
+              children: [
+                if (unit.facing != null || unit.furnishing != null) ...[
+                  if (unit.facing != null) RowLabel(label: 'Facing', value: unit.facing!),
+                  if (unit.furnishing != null)
+                    RowLabel(label: 'Furnishing', value: unit.furnishing!.replaceAll('_', ' ')),
+                ],
+                if (unit.features.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: unit.features
+                          .map(
+                            (f) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceMuted,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                f,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textMuted),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (planUrl != null) ...[
+            const SizedBox(height: 16),
+            SectionCard(
+              title: 'Floor plan',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: Image.network(
+                    planUrl,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (_, child, progress) =>
+                        progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    errorBuilder: (_, _, _) => const SizedBox(
+                      height: 160,
+                      child: Center(child: Icon(Icons.image_not_supported_outlined, size: 32, color: AppColors.textSubtle)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           SectionCard(
             title: 'Pricing',
