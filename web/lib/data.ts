@@ -66,9 +66,9 @@ export interface Tenant {
 }
 
 export const tenants: Tenant[] = [
-  { id: "builder-a", code: "BA", name: "Builder A Homes", subdomain: "builder-a.estateflow.in", location: "Bengaluru", region: "ap-south-1", planId: "plan-enterprise" },
-  { id: "green-acre", code: "GA", name: "GreenAcre Developers", subdomain: "greenacre.estateflow.in", location: "Hyderabad", region: "ap-south-1", planId: "plan-land" },
-  { id: "aarav", code: "AH", name: "Aarav Towers", subdomain: "aarav.estateflow.in", location: "Chennai", region: "ap-south-1", planId: "plan-homes" },
+  { id: "builder-a", code: "BA", name: "Viswa Groups", subdomain: "builder-a.estateflow.in", location: "Bengaluru", region: "ap-south-1", planId: "plan-enterprise" },
+  { id: "green-acre", code: "GA", name: "Viswa Developers", subdomain: "greenacre.estateflow.in", location: "Hyderabad", region: "ap-south-1", planId: "plan-land" },
+  { id: "aarav", code: "AH", name: "Viswa Properties", subdomain: "aarav.estateflow.in", location: "Chennai", region: "ap-south-1", planId: "plan-homes" },
 ];
 
 export type UnitStatus = "available" | "blocked" | "token_paid" | "sold" | "under_maintenance";
