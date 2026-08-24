@@ -10,34 +10,36 @@ export function AssistantPanel() {
   const [messages, setMessages] = useState<{ from: "user" | "ai"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (chat && messages.length === 0) setMessages(chat.slice(0, 4));
   }, [chat]);
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     if (!text.trim() || thinking) return;
     setMessages((m) => [...m, { from: "user", text }]);
     setInput("");
     setThinking(true);
-    apiSend<{ from: "user" | "ai"; text: string }>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify({ from: "user", text }),
-    }).catch(() => {});
-    setTimeout(() => {
-      const reply = {
-        from: "ai" as const,
-        text: "Confirmed. I've synced this with the booking engine and WhatsApp. Would you like me to send a payment-plan PDF as well?",
-      };
-      setMessages((m) => [...m, reply]);
-      setChat((c) => (c ? [...c, { from: "user", text }, reply] : [{ from: "user", text }, reply]));
+    try {
+      const data = await apiSend<{ from: "user" | "ai"; text: string }[]>("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({ from: "user", text }),
+      });
+      const aiMsg = data?.[1] ?? { from: "ai" as const, text: "Sorry, I couldn't reach the assistant right now." };
+      setMessages((m) => [...m, aiMsg]);
+      setChat((c) => (c ? [...c, { from: "user", text }, aiMsg] : [{ from: "user", text }, aiMsg]));
+    } catch {
+      setMessages((m) => [...m, { from: "ai", text: "Something went wrong. Please try again." }]);
+    } finally {
       setThinking(false);
-    }, 1200);
+    }
   };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);
 
   const seedText = chat?.[0]?.text ?? "Confirm the booking…";

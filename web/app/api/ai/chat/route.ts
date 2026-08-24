@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAiChat, addAiMessage } from "@/lib/repo";
+import { getAiChat, addAiExchange } from "@/lib/repo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +20,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "text required" }, { status: 400 });
   }
 
-  const message = await addAiMessage({ from: body.from === "user" ? "user" : "ai", text: body.text });
-  return NextResponse.json({ data: message }, { status: 201 });
+  const messages = await addAiExchange(body.text);
+  return NextResponse.json({ data: messages }, { status: 201 });
 }

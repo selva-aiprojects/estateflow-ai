@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { q, qOne, qVal, tx } from "@/lib/db";
+import { grokComplete, type GrokMessage } from "@/lib/grok";
 import {
   PLANS,
   computeLandSummary,
@@ -1976,11 +1977,46 @@ export async function addPortalChat(customerId: string, text: string): Promise<P
     WHERE psl.status IN ('pending','due','partially_paid')
     ORDER BY psl.installment_no LIMIT 1`);
   const progressRow = await qVal<number>(`SELECT progress_pct FROM dprs ORDER BY report_date DESC LIMIT 1`);
-  const reply = portalAiReply(text, {
-    nextDue: next ? dateStr(next.due_date) : undefined,
-    nextAmount: next ? num(next.total_due) - num(next.paid_amount) : undefined,
-    progress: progressRow ?? undefined,
-  });
+  const nextDue = next ? dateStr(next.due_date) : undefined;
+  const nextAmount = next ? num(next.total_due) - num(next.paid_amount) : undefined;
+  const fallback = portalAiReply(text, { nextDue, nextAmount, progress: progressRow ?? undefined });
+
+  const customer = await qOne<DbRow>(`SELECT name FROM customers WHERE id = $1`, [customerId]);
+  const unitRow = await qOne<DbRow>(`
+    SELECT pr.name AS project_name, u.unit_type, u.carpet_area_sqft
+    FROM bookings bk
+    JOIN units u ON u.id = bk.unit_id
+    JOIN blocks bl ON bl.id = u.block_id
+    JOIN floors f ON f.id = bl.floor_id
+    JOIN towers t ON t.id = f.tower_id
+    JOIN projects pr ON pr.id = t.project_id
+    ORDER BY bk.created_at LIMIT 1`);
+  const context: string[] = ["CUSTOMER CONTEXT:"];
+  if (customer) context.push(`Customer: ${str(customer.name)}`);
+  if (unitRow) {
+    context.push(`Unit: ${str(unitRow.unit_type)} in ${str(unitRow.project_name)} · carpet ${num(unitRow.carpet_area_sqft)} sq.ft`);
+  }
+  if (nextDue && nextAmount) context.push(`Next installment: ₹${Math.round(nextAmount).toLocaleString("en-IN")} due ${nextDue}`);
+  if (progressRow) context.push(`Construction progress: ${Math.round(progressRow)}%`);
+
+  const history = (await fetchPortalChat(customerId)).slice(-6);
+  const messages: GrokMessage[] = [
+    {
+      role: "system",
+      content: `You are EstateFlow's customer assistant (the AI Customer Agent). Answer the buyer's question warmly, in plain concise text under 80 words, no markdown headers, no emojis. Ground answers only in the provided CUSTOMER CONTEXT — never invent figures. Cover payments, construction progress, possession, amenities, events, warranty, referrals and home loans; when unsure, point to the relevant tab in the customer portal.`,
+    },
+    {
+      role: "system",
+      content: context.join("\n"),
+    },
+    ...history.map((h) => ({
+      role: (h.from === "ai" ? "assistant" : "user") as "user" | "assistant",
+      content: h.text,
+    })),
+    { role: "user", content: text },
+  ];
+  const reply = (await grokComplete(messages)) ?? fallback;
+
   if (convoId) {
     const seq =
       (await qVal<number>(`SELECT COALESCE(MAX(COALESCE((payload->>'seq')::int, 0)), 0) + 1 AS v FROM ai_messages WHERE conversation_id = $1`, [convoId])) ?? 0;
@@ -2695,17 +2731,79 @@ export async function getAiChat(): Promise<{ from: "user" | "ai"; text: string }
   }));
 }
 
+async function latestConversationId(): Promise<string | undefined> {
+  return qVal<string>(`SELECT id::text AS v FROM ai_conversations ORDER BY created_at DESC LIMIT 1`);
+}
+
+async function insertAiMessage(role: "user" | "assistant", content: string): Promise<void> {
+  const convoId = await latestConversationId();
+  if (!convoId) return;
+  const seq =
+    (await qVal<number>(`SELECT COALESCE(MAX(COALESCE((payload->>'seq')::int, 0)), 0) + 1 AS v FROM ai_messages WHERE conversation_id = $1`, [convoId])) ?? 0;
+  await q(
+    `INSERT INTO ai_messages (conversation_id, role, content, payload) VALUES ($1, $2, $3, $4)`,
+    [convoId, role === "assistant" ? "assistant" : "user", content, JSON.stringify({ seq })],
+  );
+}
+
 export async function addAiMessage(message: { from: "user" | "ai"; text: string }) {
-  const convoId = await qVal<string>(`SELECT id::text AS v FROM ai_conversations ORDER BY created_at DESC LIMIT 1`);
-  if (convoId) {
-    const seq =
-      (await qVal<number>(`SELECT COALESCE(MAX(COALESCE((payload->>'seq')::int, 0)), 0) + 1 AS v FROM ai_messages WHERE conversation_id = $1`, [convoId])) ?? 0;
-    await q(
-      `INSERT INTO ai_messages (conversation_id, role, content, payload) VALUES ($1, $2, $3, $4)`,
-      [convoId, message.from === "ai" ? "assistant" : "user", message.text, JSON.stringify({ seq })],
-    );
-  }
+  await insertAiMessage(message.from === "ai" ? "assistant" : "user", message.text);
   return { from: message.from, text: message.text };
+}
+
+async function buildTenantContext(): Promise<string> {
+  const projectRows = await q<DbRow>(`SELECT code, name FROM projects ORDER BY name LIMIT 6`);
+  const unitRows = await q<DbRow>(`SELECT status, count(*)::int AS c FROM units GROUP BY status`);
+  const unitValue = await qVal<number>(`SELECT COALESCE(SUM(bsp_price), 0)::numeric(19,2)::float8 AS v FROM units`);
+  const customerCount = await qVal<number>(`SELECT count(*)::int AS v FROM customers`);
+  const leadRows = await q<DbRow>(`SELECT status, count(*)::int AS c FROM leads GROUP BY status`);
+  const vendorCount = await qVal<number>(`SELECT count(*)::int AS v FROM vendors`);
+  const cash = await qOne<DbRow>(`
+    SELECT COALESCE(SUM(expected_inflow), 0)::numeric(19,2)::float8 AS inflow,
+           COALESCE(SUM(expected_outflow), 0)::numeric(19,2)::float8 AS outflow
+    FROM cash_flow_forecasts`);
+  const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+  const lines: string[] = ["LIVE TENANT SNAPSHOT:"];
+  if (projectRows.length) lines.push(`Projects: ${projectRows.map((p) => `${str(p.code)} (${str(p.name)})`).join(", ")}`);
+  if (unitRows.length) {
+    lines.push(`Units: ${unitRows.map((r) => `${str(r.status)} ${num(r.c)}`).join(", ")}`);
+  }
+  if (unitValue) lines.push(`Inventory value: ${inr(unitValue)}`);
+  if (customerCount) lines.push(`Customers: ${customerCount}`);
+  if (leadRows.length) lines.push(`Leads: ${leadRows.map((r) => `${str(r.status)} ${num(r.c)}`).join(", ")}`);
+  if (vendorCount) lines.push(`Vendors: ${vendorCount}`);
+  if (cash) lines.push(`Cash-flow forecast: inflow ${inr(num(cash.inflow))} · outflow ${inr(num(cash.outflow))}`);
+  return lines.join("\n");
+}
+
+const UNIFIED_SYSTEM_PROMPT = `You are EstateFlow AI, the unified assistant for a real-estate company. You coordinate six specialised agents:
+- AI Sales Agent (leads, site visits, unit availability, pricing)
+- AI Construction Agent (DPRs, schedule, project health, delays)
+- AI Finance Agent (cash flow, invoicing, collections, budget variance)
+- AI Legal Agent (titles, RERA filings, compliance)
+- AI Procurement Agent (RFQ, vendors, purchase orders)
+- AI Customer Agent (buyer/customer queries)
+Rules: answer in plain concise text under 90 words, no markdown headers, no emojis. Ground numbers only in the provided tenant snapshot — never invent figures. Prefix answers with the agent that handled them (e.g. "Finance Agent:"). If the data needed is not in the snapshot, say so and point to the relevant module.`;
+
+export async function addAiExchange(userText: string): Promise<{ from: "user" | "ai"; text: string }[]> {
+  await insertAiMessage("user", userText);
+  const context = await buildTenantContext();
+  const history = (await getAiChat()).slice(-8);
+  const messages: GrokMessage[] = [
+    { role: "system", content: `${UNIFIED_SYSTEM_PROMPT}\n\n${context}` },
+    ...history.map((h) => ({
+      role: (h.from === "ai" ? "assistant" : "user") as "user" | "assistant",
+      content: h.text,
+    })),
+  ];
+  const reply =
+    (await grokComplete(messages)) ??
+    "The AI service isn't reachable right now. I'm answering from the demo snapshot: I can cover sales, construction, finance, legal, procurement and customer queries. Ask me about units, cash flow, vendors or project health — or retry in a moment.";
+  await insertAiMessage("assistant", reply);
+  return [
+    { from: "user", text: userText },
+    { from: "ai", text: reply },
+  ];
 }
 
 // ---------------------------------------------------------------------------
